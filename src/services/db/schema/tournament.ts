@@ -1,0 +1,165 @@
+import {
+  date,
+  integer,
+  pgTable,
+  text,
+  uuid,
+  primaryKey,
+} from "drizzle-orm/pg-core";
+import { organizationTable } from "./organization";
+import {
+  eventStateEnum,
+  genderEnum,
+  teamActionsEnum,
+  teamStatusEnum,
+  tournamentStateEnum,
+  volunteerRoleEnum,
+} from "./enums";
+import { createdAt, updatedAt } from "./common";
+import {
+  eventFormatsTable,
+  paymentModesTable,
+  pointsPerSetOptionsTable,
+  setsPerMatchOptionsTable,
+  sportsOptionsTable,
+  teamTypesTable,
+} from "./lookups";
+import { profileTable } from "./user";
+
+export const tournamentTable = pgTable.withRLS("tournament_table", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("id")
+    .notNull()
+    .references(() => organizationTable.id),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  startDate: date("start_date", { mode: "date" }).notNull(),
+  endDate: date("end_date", { mode: "date" }),
+
+  venueName: text("venue_name").notNull(),
+  venuePostalCode: text("venue_postal_code").notNull(),
+  venueState: text("venue_state").notNull(),
+  venueCity: text("venue_city").notNull(),
+  venueStreet: text("venue_street"),
+
+  venueCourts: integer("venue_courts").notNull(),
+
+  logoUrl: text("logo_url"),
+
+  contactName: text("contact_name").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone").notNull(),
+
+  upiId: text("upi_id"),
+
+  tournamentState: tournamentStateEnum("tournament_state")
+    .notNull()
+    .default("created"),
+
+  createdAt,
+  updatedAt,
+});
+
+export const eventTable = pgTable.withRLS("event_table", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tournamentId: uuid("tournament_id")
+    .notNull()
+    .references(() => tournamentTable.id),
+  eventName: text("event_name").notNull(),
+  sportId: integer("sport_id")
+    .notNull()
+    .references(() => sportsOptionsTable.id),
+  formatId: integer("format_id")
+    .notNull()
+    .references(() => eventFormatsTable.id),
+
+  dueDate: date("due_date", { mode: "date" }).notNull(),
+  startDate: date("start_date", { mode: "date" }).notNull(),
+
+  gender: genderEnum(),
+  teamTypeId: integer("team_type_id")
+    .notNull()
+    .references(() => teamTypesTable.id),
+  playerBornAfter: date("player_born_after", { mode: "date" }).notNull(),
+
+  pointsPerSetId: integer("points_per_set_id")
+    .notNull()
+    .references(() => pointsPerSetOptionsTable.id),
+  setsPerMatchId: integer("sets_per_match_id")
+    .notNull()
+    .references(() => setsPerMatchOptionsTable.id),
+
+  paymentModeId: integer("payment_mode_id")
+    .notNull()
+    .references(() => paymentModesTable.id),
+
+  amount: integer("amount").notNull(),
+
+  winnerId: uuid("winner_id")
+    .notNull()
+    .references(() => profileTable.id),
+
+  eventState: eventStateEnum("event_state").notNull().default("created"),
+
+  activeRound: integer("active_round"),
+
+  createdAt,
+  updatedAt,
+});
+
+export const tournamentVolunteerTable = pgTable.withRLS(
+  "tournament_volunteer_table",
+  {
+    tournamentId: uuid("tournament_id")
+      .notNull()
+      .references(() => tournamentTable.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profileTable.id),
+    role: volunteerRoleEnum("role").notNull(),
+
+    createdAt,
+    updatedAt,
+  },
+);
+
+export const teamTable = pgTable.withRLS("team_table_table", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamStatus: teamStatusEnum("team_status").notNull().default("registered"),
+  teamTypeId: integer("team_type_id")
+    .notNull()
+    .references(() => teamTypesTable.id),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => eventTable.id),
+
+  createdAt,
+  updatedAt,
+});
+
+export const teamParticipantTable = pgTable.withRLS(
+  "team_participant_table",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profileTable.id),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teamTable.id),
+    createdAt,
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.teamId] })],
+);
+
+export const teamActionLogsTable = pgTable.withRLS("team_action_logs_table", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teamTable.id),
+  actedById: uuid("acted_by_id")
+    .notNull()
+    .references(() => profileTable.id),
+  reason: text("reason").notNull(),
+  action: teamActionsEnum("action").notNull(),
+  createdAt,
+});

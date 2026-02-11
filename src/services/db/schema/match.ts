@@ -1,0 +1,68 @@
+import { boolean, integer, pgTable, uuid } from "drizzle-orm/pg-core";
+import { eventTable, teamTable } from "./tournament";
+import { profileTable } from "./user";
+import { matchStateEnum, setStateEnum, sideSwitchEnum } from "./enums";
+import { pointsPerSetOptionsTable, setsPerMatchOptionsTable } from "./lookups";
+import { createdAt, updatedAt } from "./common";
+
+export const matchTable = pgTable.withRLS("match_table", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => eventTable.id),
+  roundNumber: integer("round_number").notNull(),
+
+  teamA: uuid("team_a")
+    .notNull()
+    .references(() => teamTable.id),
+  teamB: uuid("team_b")
+    .notNull()
+    .references(() => teamTable.id),
+
+  scorer: uuid("scorer")
+    .notNull()
+    .references(() => profileTable.id),
+
+  winnerId: uuid("winner_id")
+    .notNull()
+    .references(() => teamTable.id),
+
+  matchState: matchStateEnum("match_state").notNull().default("scheduled"),
+
+  setsPerMatchId: integer("sets_per_match_id")
+    .notNull()
+    .references(() => setsPerMatchOptionsTable.id),
+
+  pointsPerSet: integer("points_per_set")
+    .notNull()
+    .references(() => pointsPerSetOptionsTable.id),
+
+  deuce_enabled: boolean("deuce_enabled").notNull().default(true),
+
+  deuce_limit: boolean("deuce_limit").notNull().default(false),
+
+  sideSwitching: sideSwitchEnum("side_switching").notNull(),
+
+  createdAt,
+  updatedAt,
+});
+
+export const setTable = pgTable.withRLS("set_table", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  matchId: uuid("id")
+    .notNull()
+    .references(() => matchTable.id),
+
+  setStatus: setStateEnum("set_status").notNull().default("not_started"),
+  setNumber: integer("set_integer").notNull(),
+
+  teamAScore: integer("team_a_score").notNull(),
+  teamBScore: integer("team_b_score").notNull(),
+
+  winnerId: uuid("winner_id")
+    .notNull()
+    .references(() => teamTable.id),
+
+  createdAt,
+  updatedAt,
+});
