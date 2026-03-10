@@ -49,7 +49,7 @@ export const matchTable = pgTable.withRLS("match_table", {
 
 export const setTable = pgTable.withRLS("set_table", {
   id: uuid("id").primaryKey().defaultRandom(),
-  matchId: uuid("id")
+  matchId: uuid("match_id")
     .notNull()
     .references(() => matchTable.id),
 

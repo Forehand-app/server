@@ -2,10 +2,10 @@ import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
   dialect: "postgresql",
-  schema: "./src/services/db/schema.ts",
+  schema: "./src/services/db/schema/index.ts",
   out: "./migrations",
 
   dbCredentials: {
-    url: Bun.env.DATABASE_URL!,
+    url: process.env.DATABASE_URL!,
   },
 });

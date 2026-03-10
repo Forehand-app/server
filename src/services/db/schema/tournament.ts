@@ -28,7 +28,7 @@ import { profileTable } from "./user";
 
 export const tournamentTable = pgTable.withRLS("tournament_table", {
   id: uuid("id").primaryKey().defaultRandom(),
-  organizationId: uuid("id")
+  organizationId: uuid("organization_id")
     .notNull()
     .references(() => organizationTable.id),
   name: text("name").notNull(),
