@@ -15,6 +15,7 @@ export const organizationTable = pgTable.withRLS("organization_table", {
   orgTypeId: integer("org_type_id")
     .notNull()
     .references(() => orgTypesTable.id),
+  name: text("name").notNull(),
   description: text("description").notNull(),
   logoUrl: text("logo_url"),
   establishedYear: integer("established_year").notNull(),
@@ -44,7 +45,7 @@ export const organizationMemberTable = pgTable.withRLS(
       .notNull()
       .references(() => profileTable.id),
 
-    is_owner: boolean("is_owner").notNull().default(false),
+    isOwner: boolean("is_owner").notNull().default(false),
 
     createdAt,
     updatedAt,

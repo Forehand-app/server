@@ -4,14 +4,12 @@ export const orgTypesTable = pgTable.withRLS("org_types_table", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
   label: text("label").notNull(),
-  icon: text("icon").notNull(),
 });
 
 export const sportsOptionsTable = pgTable.withRLS("sports_options_table", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
   label: text("label").notNull(),
-  icon: text("icon").notNull(),
 });
 
 export const paymentModesTable = pgTable.withRLS("payment_modes_table", {
