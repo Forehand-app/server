@@ -17,7 +17,10 @@ export const organizationTable = pgTable.withRLS("organization_table", {
     .references(() => orgTypesTable.id),
   name: text("name").notNull(),
   description: text("description").notNull(),
+
   logoUrl: text("logo_url"),
+  logoPath: text("logo_path"),
+
   establishedYear: integer("established_year").notNull(),
   website: text("website"),
 

@@ -32,12 +32,10 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
         const orgTypeId = await db.query.orgTypesTable.findFirst({
           where: { code: body.orgTypeCode },
         });
-        console.log(body.orgTypeCode);
         if (!orgTypeId)
           return sendResponse({
             success: false,
             message: "Invalid organization type",
-            data: null,
           });
 
         const organizationInsert = await db
@@ -47,7 +45,6 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
             name: body.name,
             description: body.description,
             establishedYear: body.establishedYear,
-            logoUrl: body.logoUrl,
 
             website: body.website,
             contactPhone: body.contactPhone,
@@ -91,7 +88,6 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
             minimum: 1600,
             maximum: new Date().getFullYear(),
           }),
-          logoUrl: t.Nullable(t.String()),
 
           website: t.Nullable(t.String({ format: "uri" })),
           contactPhone: t.String({ pattern: "^[6-9]\\d{9}$" }),
@@ -117,7 +113,6 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
         if (!member)
           return sendResponse({
             success: false,
-            data: null,
             message: "You are not a member of this organization",
           });
 

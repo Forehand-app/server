@@ -5,7 +5,7 @@ export const sendResponse = ({
 }: {
   success: boolean;
   message: string;
-  data: any;
+  data?: any;
 }) => ({
   success,
   message,

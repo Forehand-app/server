@@ -64,7 +64,6 @@ export const userRoutes = protectedApi.group("/user", (app) =>
         );
         await db.insert(profileTable).values({
           id: user.id,
-          profilePicUrl: body.profilePicUrl,
           name: body.name,
           phone: body.phone,
           gender: body.gender,
@@ -74,14 +73,12 @@ export const userRoutes = protectedApi.group("/user", (app) =>
         });
 
         return sendResponse({
-          data: null,
           message: "Created Profile",
           success: true,
         });
       },
       {
         body: t.Object({
-          profilePicUrl: t.Nullable(t.String()),
           name: t.String(),
           phone: t.String({ pattern: "^[6-9]\\d{9}$" }),
           gender: t.UnionEnum(["male", "female"]),
@@ -91,9 +88,8 @@ export const userRoutes = protectedApi.group("/user", (app) =>
         }),
       },
     )
-
     .put(
-      "/update-profile",
+      "/update",
       async ({ user, db, body }) => {
         const utcDob = new Date(body.dob);
         const systemDob = new Date(
@@ -103,7 +99,6 @@ export const userRoutes = protectedApi.group("/user", (app) =>
         await db
           .update(profileTable)
           .set({
-            profilePicUrl: body.profilePicUrl,
             name: body.name,
             phone: body.phone,
             gender: body.gender,
@@ -115,14 +110,12 @@ export const userRoutes = protectedApi.group("/user", (app) =>
 
         console.log(new Date(body.dob));
         return sendResponse({
-          data: null,
           message: "Profile Updated",
           success: true,
         });
       },
       {
         body: t.Object({
-          profilePicUrl: t.Nullable(t.String()),
           name: t.String(),
           phone: t.String({ pattern: "^[6-9]\\d{9}$" }),
           gender: t.UnionEnum(["male", "female"]),

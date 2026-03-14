@@ -19,7 +19,9 @@ export const profileTable = pgTable.withRLS("profile_table", {
   dob: date("dob", { mode: "date" }).notNull(),
   gender: genderEnum().notNull(),
   phone: text("phone").notNull(),
+
   profilePicUrl: text("profile_pic_url"),
+  profilePicPath: text("profile_pic_path"),
 
   playingHand: playingHandEnum("playing_hand"),
   primarySport: text("primary_sport"),

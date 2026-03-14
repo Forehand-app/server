@@ -45,6 +45,7 @@ export const tournamentTable = pgTable.withRLS("tournament_table", {
   venueCourts: integer("venue_courts").notNull(),
 
   logoUrl: text("logo_url"),
+  logoPath: text("logo_path"),
 
   contactName: text("contact_name").notNull(),
   contactEmail: text("contact_email").notNull(),
