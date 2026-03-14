@@ -4,6 +4,7 @@ import {
   organizationTable,
 } from "@/services/db/schema";
 import { sendResponse } from "@/utils/response";
+import { eq } from "drizzle-orm";
 import { t } from "elysia";
 
 export const orgRoutes = protectedApi.group("/org", (app) =>
@@ -75,6 +76,82 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
       },
       {
         body: t.Object({
+          orgTypeCode: t.UnionEnum([
+            "educationalInstitute",
+            "sportsAcademy",
+            "sportsClub",
+            "corporate",
+            "other",
+          ]),
+          name: t.String(),
+          description: t.String(),
+          establishedYear: t.Number({
+            minimum: 1600,
+            maximum: new Date().getFullYear(),
+          }),
+
+          website: t.Nullable(t.String({ format: "uri" })),
+          contactPhone: t.String({ pattern: "^[6-9]\\d{9}$" }),
+          contactEmail: t.String({ format: "email" }),
+
+          address: t.String(),
+          city: t.String(),
+          state: t.String(),
+          postalCode: t.String(),
+        }),
+      },
+    )
+    .put(
+      "/update",
+      async ({ db, body, user }) => {
+        const orgTypeId = await db.query.orgTypesTable.findFirst({
+          where: { code: body.orgTypeCode },
+        });
+        if (!orgTypeId)
+          return sendResponse({
+            success: false,
+            message: "Invalid organization type",
+          });
+        const member = await db.query.organizationMemberTable.findFirst({
+          where: {
+            organizationId: body.id,
+            userId: user.id,
+          },
+        });
+
+        if (!member)
+          return sendResponse({
+            success: false,
+            message: "You are not a member of this organization",
+          });
+
+        await db
+          .update(organizationTable)
+          .set({
+            orgTypeId: orgTypeId.id,
+            name: body.name,
+            description: body.description,
+            establishedYear: body.establishedYear,
+
+            website: body.website,
+            contactEmail: body.contactEmail,
+            contactPhone: body.contactPhone,
+
+            address: body.address,
+            city: body.city,
+            state: body.state,
+            postalCode: body.postalCode,
+          })
+          .where(eq(organizationTable.id, body.id));
+
+        return sendResponse({
+          success: true,
+          message: "Organization updated successfully",
+        });
+      },
+      {
+        body: t.Object({
+          id: t.String(),
           orgTypeCode: t.UnionEnum([
             "educationalInstitute",
             "sportsAcademy",
