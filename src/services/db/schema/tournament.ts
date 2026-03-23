@@ -19,8 +19,6 @@ import { createdAt, updatedAt } from "./common";
 import {
   eventFormatsTable,
   paymentModesTable,
-  pointsPerSetOptionsTable,
-  setsPerMatchOptionsTable,
   sportsOptionsTable,
   teamTypesTable,
 } from "./lookups";
@@ -40,7 +38,7 @@ export const tournamentTable = pgTable.withRLS("tournament_table", {
   venuePostalCode: text("venue_postal_code").notNull(),
   venueState: text("venue_state").notNull(),
   venueCity: text("venue_city").notNull(),
-  venueStreet: text("venue_street"),
+  venueAddress: text("venue_address"),
 
   venueCourts: integer("venue_courts").notNull(),
 
@@ -66,7 +64,7 @@ export const eventTable = pgTable.withRLS("event_table", {
   tournamentId: uuid("tournament_id")
     .notNull()
     .references(() => tournamentTable.id),
-  eventName: text("event_name").notNull(),
+  name: text("name").notNull(),
   sportId: integer("sport_id")
     .notNull()
     .references(() => sportsOptionsTable.id),
@@ -81,24 +79,18 @@ export const eventTable = pgTable.withRLS("event_table", {
   teamTypeId: integer("team_type_id")
     .notNull()
     .references(() => teamTypesTable.id),
-  playerBornAfter: date("player_born_after", { mode: "date" }).notNull(),
+  playerBornAfter: date("player_born_after", { mode: "date" }),
 
-  pointsPerSetId: integer("points_per_set_id")
-    .notNull()
-    .references(() => pointsPerSetOptionsTable.id),
-  setsPerMatchId: integer("sets_per_match_id")
-    .notNull()
-    .references(() => setsPerMatchOptionsTable.id),
+  pointsPerSet: integer("points_per_set").notNull(),
+  setsPerMatch: integer("sets_per_match").notNull(),
 
-  paymentModeId: integer("payment_mode_id")
-    .notNull()
-    .references(() => paymentModesTable.id),
+  paymentModeId: integer("payment_mode_id").references(
+    () => paymentModesTable.id,
+  ),
 
   amount: integer("amount").notNull(),
 
-  winnerId: uuid("winner_id")
-    .notNull()
-    .references(() => profileTable.id),
+  winnerId: uuid("winner_id").references(() => profileTable.id),
 
   eventState: eventStateEnum("event_state").notNull().default("created"),
 

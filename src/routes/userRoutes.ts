@@ -1,5 +1,6 @@
 import { protectedApi } from "@/controller";
 import { profileTable } from "@/services/db/schema";
+import { getDate } from "@/utils/helpers";
 import { sendResponse } from "@/utils/response";
 import { eq } from "drizzle-orm";
 import { t } from "elysia";
@@ -58,16 +59,12 @@ export const userRoutes = protectedApi.group("/user", (app) =>
       "/register",
       async ({ user, db, body }) => {
         // TDOD: Added duplicate check
-        const utcDob = new Date(body.dob);
-        const systemDob = new Date(
-          utcDob.getTime() - utcDob.getTimezoneOffset() * 60000,
-        );
         await db.insert(profileTable).values({
           id: user.id,
           name: body.name,
           phone: body.phone,
           gender: body.gender,
-          dob: systemDob,
+          dob: getDate(body.dob),
           playingHand: body.playingHand,
           primarySport: body.primarySport,
         });

@@ -2,7 +2,6 @@ import { boolean, integer, pgTable, uuid } from "drizzle-orm/pg-core";
 import { eventTable, teamTable } from "./tournament";
 import { profileTable } from "./user";
 import { matchStateEnum, setStateEnum, sideSwitchEnum } from "./enums";
-import { pointsPerSetOptionsTable, setsPerMatchOptionsTable } from "./lookups";
 import { createdAt, updatedAt } from "./common";
 
 export const matchTable = pgTable.withRLS("match_table", {
@@ -29,13 +28,9 @@ export const matchTable = pgTable.withRLS("match_table", {
 
   matchState: matchStateEnum("match_state").notNull().default("scheduled"),
 
-  setsPerMatchId: integer("sets_per_match_id")
-    .notNull()
-    .references(() => setsPerMatchOptionsTable.id),
+  setsPerMatchId: integer("sets_per_match").notNull(),
 
-  pointsPerSet: integer("points_per_set")
-    .notNull()
-    .references(() => pointsPerSetOptionsTable.id),
+  pointsPerSet: integer("points_per_set").notNull(),
 
   deuce_enabled: boolean("deuce_enabled").notNull().default(true),
 

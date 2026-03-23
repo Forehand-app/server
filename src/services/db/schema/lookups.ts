@@ -35,19 +35,3 @@ export const eventFormatsTable = pgTable.withRLS("event_formats_table", {
   code: text("code").notNull().unique(),
   label: text("label").notNull(),
 });
-
-export const setsPerMatchOptionsTable = pgTable.withRLS(
-  "sets_per_match_options_table",
-  {
-    id: serial("id").primaryKey(),
-    code: integer("code").notNull().unique(),
-  },
-);
-
-export const pointsPerSetOptionsTable = pgTable.withRLS(
-  "points_per_set_options_table",
-  {
-    id: serial("id").primaryKey(),
-    code: integer("code").notNull().unique(),
-  },
-);

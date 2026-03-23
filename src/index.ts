@@ -1,12 +1,25 @@
 import Elysia from "elysia";
-import { userRoutes } from "./routes/userRoutes";
-import { orgRoutes } from "./routes/orgRoutes";
-import { storageRoutes } from "./routes/storageRoutes";
+import { userRoutes } from "@/routes/userRoutes";
+import { orgRoutes } from "@/routes/orgRoutes";
+import { storageRoutes } from "@/routes/storageRoutes";
+import { optionsRoutes } from "@/routes/optionsRoutes";
+import { seed } from "@/services/db/seed";
+import { tournamentRoutes } from "./routes/tournamentRoutes";
 
-new Elysia()
-  .get("/", () => "Hello World")
-  .use(userRoutes)
-  .use(orgRoutes)
-  .use(storageRoutes)
-  .onStart(() => console.log("Server started on http://localhost:8000"))
-  .listen(8000);
+seed()
+  .then(() => {
+    console.log("Values Loaded on Database");
+    new Elysia()
+      .get("/", () => "Hello World")
+      .use(userRoutes)
+      .use(orgRoutes)
+      .use(tournamentRoutes)
+      .use(storageRoutes)
+      .use(optionsRoutes)
+      .onStart(({ server }) => console.log(`Server started on ${server?.url}`))
+      .listen(8000);
+  })
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

@@ -11,7 +11,7 @@ import { genderEnum, inviteStateEnum, playingHandEnum } from "./enums";
 import { createdAt, updatedAt } from "./common";
 import { inviteTypeTable } from "./lookups";
 import { organizationTable } from "./organization";
-import { teamTable, tournamentTable } from "./tournament";
+import { eventTable, teamTable, tournamentTable } from "./tournament";
 
 export const profileTable = pgTable.withRLS("profile_table", {
   id: uuid("id").primaryKey(),
@@ -62,17 +62,19 @@ export const organizationInvitesTable = pgTable.withRLS(
   (table) => [primaryKey({ columns: [table.inviteId, table.organizationId] })],
 );
 
-export const teamInvitesTable = pgTable.withRLS(
-  "team_invites_table",
+export const eventInvitesTable = pgTable.withRLS(
+  "event_invites_table",
   {
     inviteId: uuid("invite_id")
       .notNull()
       .references(() => invitesTable.id),
-    teamId: uuid("team_id")
+    eventId: uuid("event_id")
       .notNull()
+      .references(() => eventTable.id),
+    teamId: uuid("team_id")
       .references(() => teamTable.id),
   },
-  (table) => [primaryKey({ columns: [table.inviteId, table.teamId] })],
+  (table) => [primaryKey({ columns: [table.inviteId, table.eventId] })],
 );
 
 export const tournamentInvitesTable = pgTable.withRLS(

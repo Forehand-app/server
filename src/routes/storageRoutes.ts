@@ -1,6 +1,9 @@
 import { protectedApi } from "@/controller";
-import { organizationTable, profileTable } from "@/services/db/schema";
-import type { StorageBucket } from "@/types/storage";
+import {
+  organizationTable,
+  profileTable,
+  tournamentTable,
+} from "@/services/db/schema";
 import { sendResponse } from "@/utils/response";
 import { getImageUrl, updateImage, uploadImage } from "@/utils/storage";
 import { eq } from "drizzle-orm";
@@ -134,6 +137,90 @@ export const storageRoutes = protectedApi.group("/storage", (app) =>
         },
         {
           params: t.Object({ orgId: t.String() }),
+          body: t.Object({ image: t.File({ type: "image" }) }),
+        },
+      )
+      .post(
+        "tournament/:tournamentId",
+        async ({
+          supabase,
+          user,
+          db,
+          body: { image },
+          params: { tournamentId },
+        }) => {
+          const member = await db.query.tournamentTable.findFirst({
+            where: {
+              id: tournamentId,
+              organization: {
+                members: {
+                  userId: user.id,
+                },
+              },
+            },
+          });
+
+          if (!member)
+            return sendResponse({
+              success: false,
+              message: "You are not eligible to edit this tournament",
+            });
+
+          // Get old logo
+          const tournamentLogoPathQuery =
+            await db.query.tournamentTable.findFirst({
+              columns: { logoPath: true },
+              where: { id: tournamentId },
+            });
+
+          let tournamentLogoPath: string | null;
+
+          if (!tournamentLogoPathQuery?.logoPath) {
+            // Upload new logo if path doesn't exist
+            tournamentLogoPath = await uploadImage({
+              bucket: "tournament_logos",
+              supabase,
+              image,
+            });
+          } else {
+            // Update old image if path exist
+            tournamentLogoPath = await updateImage({
+              path: tournamentLogoPathQuery.logoPath,
+              bucket: "tournament_logos",
+              supabase,
+              image,
+            });
+          }
+
+          if (!tournamentLogoPath) {
+            return sendResponse({
+              success: false,
+              message: "Failed to upload tournament logo",
+            });
+          }
+
+          // Get signed url
+          const imageUrl = getImageUrl({
+            path: tournamentLogoPath,
+            bucket: "tournament_logos",
+            supabase,
+          });
+
+          await db
+            .update(tournamentTable)
+            .set({
+              logoUrl: imageUrl,
+              logoPath: tournamentLogoPath,
+            })
+            .where(eq(tournamentTable.id, tournamentId));
+
+          return sendResponse({
+            success: true,
+            message: "Tournament logo updated successfully",
+          });
+        },
+        {
+          params: t.Object({ tournamentId: t.String() }),
           body: t.Object({ image: t.File({ type: "image" }) }),
         },
       ),
