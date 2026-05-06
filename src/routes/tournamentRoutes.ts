@@ -102,126 +102,128 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
         }),
       },
     )
-    .post(
-      "/events/create",
-      async ({ user, db, body }) => {
-        for (const event of body) {
-          const member = await db.query.tournamentTable.findFirst({
-            where: {
-              id: event.tournamentId,
-              organization: {
-                members: {
-                  userId: user.id,
+    .group("/events", (eventsApp) =>
+      eventsApp.post(
+        "/create",
+        async ({ user, db, body }) => {
+          for (const event of body) {
+            const member = await db.query.tournamentTable.findFirst({
+              where: {
+                id: event.tournamentId,
+                organization: {
+                  members: {
+                    userId: user.id,
+                  },
                 },
               },
-            },
-          });
+            });
 
-          if (!member) {
-            return {
-              success: false,
-              message: "You are not eligible to create these event",
-            };
-          }
+            if (!member) {
+              return {
+                success: false,
+                message: "You are not eligible to create these event",
+              };
+            }
 
-          const sport = await db.query.sportsOptionsTable.findFirst({
-            where: {
-              code: event.sportsOptionCode,
-            },
-            columns: {
-              id: true,
-            },
-          });
+            const sport = await db.query.sportsOptionsTable.findFirst({
+              where: {
+                code: event.sportsOptionCode,
+              },
+              columns: {
+                id: true,
+              },
+            });
 
-          const eventFormat = await db.query.eventFormatsTable.findFirst({
-            where: {
-              code: event.eventFormatCode,
-            },
-            columns: {
-              id: true,
-            },
-          });
+            const eventFormat = await db.query.eventFormatsTable.findFirst({
+              where: {
+                code: event.eventFormatCode,
+              },
+              columns: {
+                id: true,
+              },
+            });
 
-          const teamType = await db.query.teamTypesTable.findFirst({
-            where: {
-              code: event.teamTypeCode,
-            },
-            columns: {
-              id: true,
-            },
-          });
+            const teamType = await db.query.teamTypesTable.findFirst({
+              where: {
+                code: event.teamTypeCode,
+              },
+              columns: {
+                id: true,
+              },
+            });
 
-          const paymentMode =
-            event.paymentModeCode !== null
-              ? await db.query.paymentModesTable.findFirst({
-                where: {
-                  code: event.paymentModeCode,
-                },
-                columns: {
-                  id: true,
-                },
-              })
-              : null;
+            const paymentMode =
+              event.paymentModeCode !== null
+                ? await db.query.paymentModesTable.findFirst({
+                  where: {
+                    code: event.paymentModeCode,
+                  },
+                  columns: {
+                    id: true,
+                  },
+                })
+                : null;
 
-          if (
-            !sport ||
-            !eventFormat ||
-            !teamType ||
-            (event.paymentModeCode && !paymentMode)
-          ) {
-            return sendResponse({
-              success: false,
-              message: "Invalid event details",
+            if (
+              !sport ||
+              !eventFormat ||
+              !teamType ||
+              (event.paymentModeCode && !paymentMode)
+            ) {
+              return sendResponse({
+                success: false,
+                message: "Invalid event details",
+              });
+            }
+
+            await db.insert(eventTable).values({
+              tournamentId: event.tournamentId,
+              name: event.name,
+              sportId: sport.id,
+              formatId: eventFormat.id,
+              gender: event.gender,
+
+              dueDate: getDate(event.dueDate),
+              startDate: getDate(event.startDate),
+
+              teamTypeId: teamType.id,
+
+              pointsPerSet: event.pointsPerSet,
+              setsPerMatch: event.setsPerMatch,
+
+              paymentModeId: paymentMode?.id,
+              amount: event.amount,
+              playerBornAfter:
+                event.playerBornAfter !== null
+                  ? getDate(event.playerBornAfter!)
+                  : null,
             });
           }
-
-          await db.insert(eventTable).values({
-            tournamentId: event.tournamentId,
-            name: event.name,
-            sportId: sport.id,
-            formatId: eventFormat.id,
-            gender: event.gender,
-
-            dueDate: getDate(event.dueDate),
-            startDate: getDate(event.startDate),
-
-            teamTypeId: teamType.id,
-
-            pointsPerSet: event.pointsPerSet,
-            setsPerMatch: event.setsPerMatch,
-
-            paymentModeId: paymentMode?.id,
-            amount: event.amount,
-            playerBornAfter:
-              event.playerBornAfter !== null
-                ? getDate(event.playerBornAfter!)
-                : null,
+          return sendResponse({
+            success: true,
+            message: "Event created successfully",
           });
-        }
-        return sendResponse({
-          success: true,
-          message: "Event created successfully",
-        });
-      },
-      {
-        body: t.Array(
-          t.Object({
-            tournamentId: t.String(),
-            name: t.String(),
-            sportsOptionCode: t.String(),
-            eventFormatCode: t.String(),
-            dueDate: t.String(),
-            startDate: t.String(),
-            gender: t.Nullable(t.UnionEnum(["male", "female"])),
-            teamTypeCode: t.String(),
-            setsPerMatch: t.Number(),
-            pointsPerSet: t.Number(),
-            playerBornAfter: t.Nullable(t.String()),
-            paymentModeCode: t.Nullable(t.String()),
-            amount: t.Number(),
-          }),
-        ),
-      },
+        },
+        {
+          body: t.Array(
+            t.Object({
+              tournamentId: t.String(),
+              name: t.String(),
+              sportsOptionCode: t.String(),
+              eventFormatCode: t.String(),
+              dueDate: t.String(),
+              startDate: t.String(),
+              gender: t.Nullable(t.UnionEnum(["male", "female"])),
+              teamTypeCode: t.String(),
+              setsPerMatch: t.Number(),
+              pointsPerSet: t.Number(),
+              playerBornAfter: t.Nullable(t.String()),
+              paymentModeCode: t.Nullable(t.String()),
+              amount: t.Number(),
+            }),
+          ),
+        },
+      )
     )
     .group("/list", (listApp) =>
       listApp

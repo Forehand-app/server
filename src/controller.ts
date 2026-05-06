@@ -10,8 +10,15 @@ const baseApi = new Elysia()
   .decorate("supabase", supabase)
   .decorate("db", db);
 
+export const publicApi = new Elysia()
+  .use(logger())
+  .use(cors())
+  .decorate("supabase", supabase)
+  .decorate("db", db);
+
 export const protectedApi = baseApi
   .derive(async ({ request, supabase, status }) => {
+    console.log("here");
     const authHeader = request.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return status(401, "Unauthorized");
@@ -28,5 +35,3 @@ export const protectedApi = baseApi
     return { user };
   })
   .as("global");
-
-export const publicApi = baseApi;
