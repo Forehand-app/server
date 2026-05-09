@@ -32,17 +32,18 @@ export const setStateEnum = pgEnum("set_state_enum", [
 
 export const eventStateEnum = pgEnum("event_state_enum", [
   "created",
-  "registration_open",
   "registration_closed",
   "participants_finalized",
   "scheduled",
   "in_progress",
+  "round_over",
   "completed",
   "cancelled",
 ]);
 
 export const tournamentStateEnum = pgEnum("tournament_state_enum", [
-  "created",
+  "drafted",
+  "published",
   "in_progress",
   "completed",
   "cancelled",
