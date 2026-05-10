@@ -1,12 +1,16 @@
 import { protectedApi } from "@/controller";
-import { inviteTypeTable } from "@/services/db/schema/lookups";
-import { organizationMemberTable } from "@/services/db/schema/organization";
 import {
+  inviteTypeTable,
+  organizationMemberTable,
+  eventInvitesTable,
+  eventTable,
+  teamParticipantTable,
+  teamTable,
   invitesTable,
   organizationInvitesTable,
   profileTable,
   tournamentInvitesTable,
-} from "@/services/db/schema/user";
+} from "@/services/db/schema";
 import { sendResponse } from "@/utils/response";
 import { and, desc, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -49,7 +53,7 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
             });
           }
 
-          const [createdInvite] = await db
+          const createdInvites = await db
             .insert(invitesTable)
             .values({
               senderId: user.id,
@@ -62,6 +66,9 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
               id: invitesTable.id,
               inviteState: invitesTable.inviteState,
             });
+
+          const createdInvite = createdInvites[0];
+          if (!createdInvite) throw new Error("Failed to create invite");
 
           await db.insert(tournamentInvitesTable).values({
             inviteId: createdInvite.id,
@@ -153,7 +160,7 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
             });
           }
 
-          const [createdInvite] = await db
+          const createdInvites = await db
             .insert(invitesTable)
             .values({
               senderId: user.id,
@@ -166,6 +173,9 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
               id: invitesTable.id,
               inviteState: invitesTable.inviteState,
             });
+
+          const createdInvite = createdInvites[0];
+          if (!createdInvite) throw new Error("Failed to create invite");
 
           await db.insert(organizationInvitesTable).values({
             inviteId: createdInvite.id,
@@ -209,6 +219,92 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
       },
     )
     .post(
+      "/event/team/create",
+      async ({ user, db, body }) => {
+        try {
+          const [inviteType] = await db
+            .select({ id: inviteTypeTable.id })
+            .from(inviteTypeTable)
+            .where(eq(inviteTypeTable.code, "event"))
+            .limit(1);
+
+          if (!inviteType) {
+            return sendResponse({
+              success: false,
+              message: "Invite type configuration is missing for events.",
+            });
+          }
+
+          const [receiver] = await db
+            .select({
+              id: profileTable.id,
+              name: profileTable.name,
+              profilePicUrl: profileTable.profilePicUrl,
+            })
+            .from(profileTable)
+            .where(eq(profileTable.phone, body.phone))
+            .limit(1);
+
+          if (!receiver) {
+            return sendResponse({
+              success: false,
+              message: "No user found with this phone number.",
+            });
+          }
+
+          if (receiver.id === user.id) {
+            return sendResponse({
+              success: false,
+              message: "You cannot invite yourself.",
+            });
+          }
+
+          const inviteId = await db.transaction(async (tx) => {
+            const createdInvites = await tx
+              .insert(invitesTable)
+              .values({
+                senderId: user.id,
+                receiverId: receiver.id,
+                token: randomUUID(),
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                invteTypeId: inviteType.id,
+              })
+              .returning({ id: invitesTable.id });
+
+            const createdInvite = createdInvites[0];
+            if (!createdInvite) throw new Error("Failed to create invite");
+
+            await tx.insert(eventInvitesTable).values({
+              inviteId: createdInvite.id,
+              eventId: body.eventId,
+              teamId: body.teamId ?? null,
+            });
+
+            return createdInvite.id;
+          });
+
+          return sendResponse({
+            success: true,
+            message: "Event team invite created successfully",
+            data: { inviteId },
+          });
+        } catch (error) {
+          console.error("[invite/event/team/create] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to create event invite.",
+          });
+        }
+      },
+      {
+        body: t.Object({
+          phone: t.String({ pattern: "^[6-9]\\d{9}$" }),
+          eventId: t.String(),
+          teamId: t.Optional(t.Nullable(t.String())),
+        }),
+      },
+    )
+    .post(
       "/organization/member/list",
       async ({ user, db, body }) => {
         const member = await db.query.organizationMemberTable.findFirst({
@@ -235,9 +331,14 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
             receiverProfilePicUrl: profileTable.profilePicUrl,
           })
           .from(organizationInvitesTable)
-          .innerJoin(invitesTable, eq(organizationInvitesTable.inviteId, invitesTable.id))
+          .innerJoin(
+            invitesTable,
+            eq(organizationInvitesTable.inviteId, invitesTable.id),
+          )
           .innerJoin(profileTable, eq(invitesTable.receiverId, profileTable.id))
-          .where(eq(organizationInvitesTable.organizationId, body.organizationId))
+          .where(
+            eq(organizationInvitesTable.organizationId, body.organizationId),
+          )
           .orderBy(desc(invitesTable.createdAt));
 
         const data = rows.map((row) => ({
@@ -276,7 +377,10 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
             senderId: invitesTable.senderId,
           })
           .from(organizationInvitesTable)
-          .innerJoin(invitesTable, eq(organizationInvitesTable.inviteId, invitesTable.id))
+          .innerJoin(
+            invitesTable,
+            eq(organizationInvitesTable.inviteId, invitesTable.id),
+          )
           .where(
             and(
               eq(organizationInvitesTable.inviteId, body.inviteId),
@@ -302,7 +406,8 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
         if (!member && row.senderId !== user.id) {
           return sendResponse({
             success: false,
-            message: "You are not allowed to remove this organization member invite.",
+            message:
+              "You are not allowed to remove this organization member invite.",
           });
         }
 
@@ -343,7 +448,10 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
             receiverProfilePicUrl: profileTable.profilePicUrl,
           })
           .from(tournamentInvitesTable)
-          .innerJoin(invitesTable, eq(tournamentInvitesTable.inviteId, invitesTable.id))
+          .innerJoin(
+            invitesTable,
+            eq(tournamentInvitesTable.inviteId, invitesTable.id),
+          )
           .innerJoin(profileTable, eq(invitesTable.receiverId, profileTable.id))
           .where(eq(tournamentInvitesTable.tournamentId, body.tournamentId))
           .orderBy(desc(invitesTable.createdAt));
@@ -383,7 +491,10 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
             senderId: invitesTable.senderId,
           })
           .from(tournamentInvitesTable)
-          .innerJoin(invitesTable, eq(tournamentInvitesTable.inviteId, invitesTable.id))
+          .innerJoin(
+            invitesTable,
+            eq(tournamentInvitesTable.inviteId, invitesTable.id),
+          )
           .where(
             and(
               eq(tournamentInvitesTable.inviteId, body.inviteId),
@@ -437,6 +548,9 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
             id: body.inviteId,
             receiverId: user.id,
           },
+          with: {
+            invteType: true,
+          },
         });
 
         if (!invite) {
@@ -446,48 +560,86 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
           });
         }
 
-        await db
-          .update(invitesTable)
-          .set({
-            inviteState: body.action === "accept" ? "accepted" : "rejected",
-          })
-          .where(eq(invitesTable.id, body.inviteId));
+        await db.transaction(async (tx) => {
+          await tx
+            .update(invitesTable)
+            .set({
+              inviteState: body.action === "accept" ? "accepted" : "rejected",
+            })
+            .where(eq(invitesTable.id, body.inviteId));
 
-        if (body.action === "accept") {
-          const [orgInvite] = await db
-            .select({ organizationId: organizationInvitesTable.organizationId })
-            .from(organizationInvitesTable)
-            .where(eq(organizationInvitesTable.inviteId, invite.id))
-            .limit(1);
+          if (body.action === "accept" && invite.invteType) {
+            // Handle Organization Invite
+            if (invite.invteType.code === "organization") {
+              const [orgInvite] = await tx
+                .select({
+                  organizationId: organizationInvitesTable.organizationId,
+                })
+                .from(organizationInvitesTable)
+                .where(eq(organizationInvitesTable.inviteId, invite.id))
+                .limit(1);
 
-          console.log("[invite/respond] accept", {
-            inviteId: invite.id,
-            receiverId: user.id,
-            orgInviteOrganizationId: orgInvite?.organizationId || null,
-          });
+              if (orgInvite?.organizationId) {
+                await tx
+                  .insert(organizationMemberTable)
+                  .values({
+                    organizationId: orgInvite.organizationId,
+                    userId: user.id,
+                    isOwner: false,
+                  })
+                  .onConflictDoNothing();
+              }
+            }
 
-          if (orgInvite?.organizationId) {
-            await db
-              .insert(organizationMemberTable)
-              .values({
-                organizationId: orgInvite.organizationId,
-                userId: user.id,
-                isOwner: false,
-              })
-              .onConflictDoNothing();
+            // Handle Event/Team Invite
+            if (invite.invteType.code === "event") {
+              const [eventInvite] = await tx
+                .select()
+                .from(eventInvitesTable)
+                .where(eq(eventInvitesTable.inviteId, invite.id))
+                .limit(1);
 
-            console.log("[invite/respond] org membership upserted", {
-              inviteId: invite.id,
-              organizationId: orgInvite.organizationId,
-              userId: user.id,
-            });
-          } else {
-            console.log("[invite/respond] no organization link for invite", {
-              inviteId: invite.id,
-              userId: user.id,
-            });
+              if (eventInvite) {
+                let teamId = eventInvite.teamId;
+
+                if (teamId) {
+                  // Add user to existing team
+                  await tx
+                    .insert(teamParticipantTable)
+                    .values({
+                      teamId: teamId,
+                      userId: user.id,
+                    })
+                    .onConflictDoNothing();
+                } else {
+                  // Create new team and add both sender and receiver
+                  const event = await tx.query.eventTable.findFirst({
+                    where: { id: eventInvite.eventId },
+                  });
+
+                  if (event) {
+                    const insertedTeams = await tx
+                      .insert(teamTable)
+                      .values({
+                        eventId: eventInvite.eventId,
+                        teamTypeId: event.teamTypeId,
+                        teamStatus: "registered",
+                      })
+                      .returning({ id: teamTable.id });
+
+                    const newTeam = insertedTeams[0];
+                    if (newTeam) {
+                      await tx.insert(teamParticipantTable).values([
+                        { teamId: newTeam.id, userId: invite.senderId },
+                        { teamId: newTeam.id, userId: user.id },
+                      ]);
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        });
 
         return sendResponse({
           success: true,
@@ -521,7 +673,3 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
       });
     }),
 );
-
-
-
-

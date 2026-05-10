@@ -22,9 +22,7 @@ export const matchTable = pgTable.withRLS("match_table", {
     .notNull()
     .references(() => profileTable.id),
 
-  winnerId: uuid("winner_id")
-    .notNull()
-    .references(() => teamTable.id),
+  winnerId: uuid("winner_id").references(() => teamTable.id),
 
   matchState: matchStateEnum("match_state").notNull().default("scheduled"),
 
@@ -54,9 +52,7 @@ export const setTable = pgTable.withRLS("set_table", {
   teamAScore: integer("team_a_score").notNull(),
   teamBScore: integer("team_b_score").notNull(),
 
-  winnerId: uuid("winner_id")
-    .notNull()
-    .references(() => teamTable.id),
+  winnerId: uuid("winner_id").references(() => teamTable.id),
 
   createdAt,
   updatedAt,

@@ -53,7 +53,7 @@ export const tournamentTable = pgTable.withRLS("tournament_table", {
 
   tournamentState: tournamentStateEnum("tournament_state")
     .notNull()
-    .default("created"),
+    .default("drafted"),
 
   createdAt,
   updatedAt,

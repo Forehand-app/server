@@ -1,19 +1,19 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "7277e026-1a23-4dde-9f3f-1debb9240567",
+  "id": "dc6a64bf-1ce6-4077-b300-2f007058e06f",
   "prevIds": [
-    "9364ea3e-4f8a-4957-8146-065fda550e42"
+    "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
     {
       "values": [
         "created",
-        "registration_open",
         "registration_closed",
         "participants_finalized",
         "scheduled",
         "in_progress",
+        "round_over",
         "completed",
         "cancelled"
       ],
@@ -104,7 +104,8 @@
     },
     {
       "values": [
-        "created",
+        "drafted",
+        "published",
         "in_progress",
         "completed",
         "cancelled"
@@ -143,18 +144,6 @@
     {
       "isRlsEnabled": true,
       "name": "payment_modes_table",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": true,
-      "name": "points_per_set_options_table",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": true,
-      "name": "sets_per_match_options_table",
       "entityType": "tables",
       "schema": "public"
     },
@@ -232,6 +221,12 @@
     },
     {
       "isRlsEnabled": true,
+      "name": "event_invites_table",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": true,
       "name": "invites_table",
       "entityType": "tables",
       "schema": "public"
@@ -245,12 +240,6 @@
     {
       "isRlsEnabled": true,
       "name": "profile_table",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": true,
-      "name": "team_invites_table",
       "entityType": "tables",
       "schema": "public"
     },
@@ -427,58 +416,6 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "points_per_set_options_table"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "code",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "points_per_set_options_table"
-    },
-    {
-      "type": "serial",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sets_per_match_options_table"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "code",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "sets_per_match_options_table"
-    },
-    {
-      "type": "serial",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
       "table": "sports_options_table"
     },
     {
@@ -627,7 +564,7 @@
     {
       "type": "uuid",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -658,7 +595,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "sets_per_match_id",
+      "name": "sets_per_match",
       "entityType": "columns",
       "schema": "public",
       "table": "match_table"
@@ -822,7 +759,7 @@
     {
       "type": "uuid",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -989,14 +926,14 @@
       "table": "organization_table"
     },
     {
-      "type": "uuid",
+      "type": "text",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "logo_id",
+      "name": "logo_path",
       "entityType": "columns",
       "schema": "public",
       "table": "organization_table"
@@ -1178,7 +1115,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "event_name",
+      "name": "name",
       "entityType": "columns",
       "schema": "public",
       "table": "event_table"
@@ -1264,7 +1201,7 @@
     {
       "type": "date",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -1282,7 +1219,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "points_per_set_id",
+      "name": "points_per_set",
       "entityType": "columns",
       "schema": "public",
       "table": "event_table"
@@ -1295,7 +1232,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "sets_per_match_id",
+      "name": "sets_per_match",
       "entityType": "columns",
       "schema": "public",
       "table": "event_table"
@@ -1303,7 +1240,7 @@
     {
       "type": "integer",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -1329,7 +1266,7 @@
     {
       "type": "uuid",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -1724,7 +1661,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "venue_street",
+      "name": "venue_address",
       "entityType": "columns",
       "schema": "public",
       "table": "tournament_table"
@@ -1756,14 +1693,14 @@
       "table": "tournament_table"
     },
     {
-      "type": "uuid",
+      "type": "text",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "logo_id",
+      "name": "logo_path",
       "entityType": "columns",
       "schema": "public",
       "table": "tournament_table"
@@ -1825,7 +1762,7 @@
       "typeSchema": "public",
       "notNull": true,
       "dimensions": 0,
-      "default": "'created'",
+      "default": "'drafted'",
       "generated": null,
       "identity": null,
       "name": "tournament_state",
@@ -1923,6 +1860,45 @@
       "entityType": "columns",
       "schema": "public",
       "table": "tournament_volunteer_table"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "invite_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "event_invites_table"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "event_invites_table"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "team_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "event_invites_table"
     },
     {
       "type": "uuid",
@@ -2146,6 +2122,19 @@
       "table": "profile_table"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "profile_pic_path",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "profile_table"
+    },
+    {
       "type": "playing_hand_enum",
       "typeSchema": "public",
       "notNull": false,
@@ -2196,32 +2185,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "profile_table"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "invite_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "team_invites_table"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "team_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "team_invites_table"
     },
     {
       "type": "uuid",
@@ -2330,40 +2293,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "match_table_winner_id_team_table_table_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "match_table"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "sets_per_match_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "sets_per_match_options_table",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "match_table_FQRT9ENjeE92_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "match_table"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "points_per_set"
-      ],
-      "schemaTo": "public",
-      "tableTo": "points_per_set_options_table",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "match_table_points_per_set_points_per_set_options_table_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "match_table"
@@ -2517,40 +2446,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "event_table_team_type_id_team_types_table_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "event_table"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "points_per_set_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "points_per_set_options_table",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "event_table_2AKfQS4P1GrZ_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "event_table"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "sets_per_match_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "sets_per_match_options_table",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "event_table_FQRT9ENpKDAN_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "event_table"
@@ -2745,6 +2640,57 @@
     {
       "nameExplicit": false,
       "columns": [
+        "invite_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "invites_table",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "event_invites_table_invite_id_invites_table_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "event_invites_table"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "event_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "event_table",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "event_invites_table_event_id_event_table_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "event_invites_table"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "team_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "team_table_table",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "event_invites_table_team_id_team_table_table_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "event_invites_table"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
         "sender_id"
       ],
       "schemaTo": "public",
@@ -2839,40 +2785,6 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "team_invites_table_invite_id_invites_table_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "team_invites_table"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "team_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "team_table_table",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "team_invites_table_team_id_team_table_table_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "team_invites_table"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "invite_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "invites_table",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
       "name": "tournament_invites_table_invite_id_invites_table_id_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -2920,6 +2832,17 @@
     {
       "columns": [
         "invite_id",
+        "event_id"
+      ],
+      "nameExplicit": false,
+      "name": "event_invites_table_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "event_invites_table"
+    },
+    {
+      "columns": [
+        "invite_id",
         "organization_id"
       ],
       "nameExplicit": false,
@@ -2927,17 +2850,6 @@
       "entityType": "pks",
       "schema": "public",
       "table": "organization_invites_table"
-    },
-    {
-      "columns": [
-        "invite_id",
-        "team_id"
-      ],
-      "nameExplicit": false,
-      "name": "team_invites_table_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "team_invites_table"
     },
     {
       "columns": [
@@ -2988,26 +2900,6 @@
       "name": "payment_modes_table_pkey",
       "schema": "public",
       "table": "payment_modes_table",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "points_per_set_options_table_pkey",
-      "schema": "public",
-      "table": "points_per_set_options_table",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "sets_per_match_options_table_pkey",
-      "schema": "public",
-      "table": "sets_per_match_options_table",
       "entityType": "pks"
     },
     {
@@ -3162,28 +3054,6 @@
       "name": "payment_modes_table_code_key",
       "schema": "public",
       "table": "payment_modes_table",
-      "entityType": "uniques"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "code"
-      ],
-      "nullsNotDistinct": false,
-      "name": "points_per_set_options_table_code_key",
-      "schema": "public",
-      "table": "points_per_set_options_table",
-      "entityType": "uniques"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "code"
-      ],
-      "nullsNotDistinct": false,
-      "name": "sets_per_match_options_table_code_key",
-      "schema": "public",
-      "table": "sets_per_match_options_table",
       "entityType": "uniques"
     },
     {

@@ -1,1 +1,0 @@
-ALTER TABLE "tournament_table" RENAME COLUMN "venue_street" TO "venue_address";

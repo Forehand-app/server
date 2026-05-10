@@ -1,7 +1,7 @@
-import { protectedApi } from "@/controller";
+import { publicApi } from "@/controller";
 import { sendResponse } from "@/utils/response";
 
-export const optionsRoutes = protectedApi.group("/options", (app) =>
+export const optionsRoutes = publicApi.group("/options", (app) =>
   app
     .get("/sports", async ({ db }) => {
       const sportsOptions = await db.query.sportsOptionsTable.findMany();

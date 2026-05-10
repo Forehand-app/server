@@ -78,5 +78,96 @@ export const relations = defineRelations(schema, (relation) => ({
       from: relation.teamParticipantTable.teamId,
       to: relation.teamTable.id,
     }),
+    user: relation.one.profileTable({
+      from: relation.teamParticipantTable.userId,
+      to: relation.profileTable.id,
+    }),
+  },
+
+  matchTable: {
+    event: relation.one.eventTable({
+      from: relation.matchTable.eventId,
+      to: relation.eventTable.id,
+    }),
+    teamAData: relation.one.teamTable({
+      from: relation.matchTable.teamA,
+      to: relation.teamTable.id,
+    }),
+    teamBData: relation.one.teamTable({
+      from: relation.matchTable.teamB,
+      to: relation.teamTable.id,
+    }),
+    winner: relation.one.teamTable({
+      from: relation.matchTable.winnerId,
+      to: relation.teamTable.id,
+    }),
+    scorerUser: relation.one.profileTable({
+      from: relation.matchTable.scorer,
+      to: relation.profileTable.id,
+    }),
+    sets: relation.many.setTable(),
+  },
+
+  setTable: {
+    match: relation.one.matchTable({
+      from: relation.setTable.matchId,
+      to: relation.matchTable.id,
+    }),
+    winner: relation.one.teamTable({
+      from: relation.setTable.winnerId,
+      to: relation.teamTable.id,
+    }),
+  },
+
+  invitesTable: {
+    sender: relation.one.profileTable({
+      from: relation.invitesTable.senderId,
+      to: relation.profileTable.id,
+    }),
+    receiver: relation.one.profileTable({
+      from: relation.invitesTable.receiverId,
+      to: relation.profileTable.id,
+    }),
+    invteType: relation.one.inviteTypeTable({
+      from: relation.invitesTable.invteTypeId,
+      to: relation.inviteTypeTable.id,
+    }),
+  },
+
+  organizationInvitesTable: {
+    invite: relation.one.invitesTable({
+      from: relation.organizationInvitesTable.inviteId,
+      to: relation.invitesTable.id,
+    }),
+    organization: relation.one.organizationTable({
+      from: relation.organizationInvitesTable.organizationId,
+      to: relation.organizationTable.id,
+    }),
+  },
+
+  eventInvitesTable: {
+    invite: relation.one.invitesTable({
+      from: relation.eventInvitesTable.inviteId,
+      to: relation.invitesTable.id,
+    }),
+    event: relation.one.eventTable({
+      from: relation.eventInvitesTable.eventId,
+      to: relation.eventTable.id,
+    }),
+    team: relation.one.teamTable({
+      from: relation.eventInvitesTable.teamId,
+      to: relation.teamTable.id,
+    }),
+  },
+
+  tournamentInvitesTable: {
+    invite: relation.one.invitesTable({
+      from: relation.tournamentInvitesTable.inviteId,
+      to: relation.invitesTable.id,
+    }),
+    tournament: relation.one.tournamentTable({
+      from: relation.tournamentInvitesTable.tournamentId,
+      to: relation.tournamentTable.id,
+    }),
   },
 }));

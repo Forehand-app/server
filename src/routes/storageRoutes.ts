@@ -149,6 +149,9 @@ export const storageRoutes = protectedApi.group("/storage", (app) =>
           body: { image },
           params: { tournamentId },
         }) => {
+          console.log(
+            `[Tournament Upload] Starting upload for tournament: ${tournamentId}, user: ${user.id}`,
+          );
           const member = await db.query.tournamentTable.findFirst({
             where: {
               id: tournamentId,
@@ -160,11 +163,19 @@ export const storageRoutes = protectedApi.group("/storage", (app) =>
             },
           });
 
-          if (!member)
+          if (!member) {
+            console.log(
+              `[Tournament Upload] Eligibility check failed for user ${user.id} on tournament ${tournamentId}`,
+            );
             return sendResponse({
               success: false,
               message: "You are not eligible to edit this tournament",
             });
+          }
+
+          console.log(
+            `[Tournament Upload] User ${user.id} is eligible to edit tournament ${tournamentId}`,
+          );
 
           // Get old logo
           const tournamentLogoPathQuery =
@@ -173,9 +184,17 @@ export const storageRoutes = protectedApi.group("/storage", (app) =>
               where: { id: tournamentId },
             });
 
+          console.log(
+            `[Tournament Upload] Current logo path:`,
+            tournamentLogoPathQuery?.logoPath,
+          );
+
           let tournamentLogoPath: string | null;
 
           if (!tournamentLogoPathQuery?.logoPath) {
+            console.log(
+              `[Tournament Upload] No existing path, uploading new image...`,
+            );
             // Upload new logo if path doesn't exist
             tournamentLogoPath = await uploadImage({
               bucket: "tournament_logos",
@@ -183,6 +202,9 @@ export const storageRoutes = protectedApi.group("/storage", (app) =>
               image,
             });
           } else {
+            console.log(
+              `[Tournament Upload] Existing path found, updating image...`,
+            );
             // Update old image if path exist
             tournamentLogoPath = await updateImage({
               path: tournamentLogoPathQuery.logoPath,
@@ -193,11 +215,18 @@ export const storageRoutes = protectedApi.group("/storage", (app) =>
           }
 
           if (!tournamentLogoPath) {
+            console.error(
+              `[Tournament Upload] Storage operation failed (upload/update returned null)`,
+            );
             return sendResponse({
               success: false,
               message: "Failed to upload tournament logo",
             });
           }
+
+          console.log(
+            `[Tournament Upload] Image saved at: ${tournamentLogoPath}`,
+          );
 
           // Get signed url
           const imageUrl = getImageUrl({
@@ -206,6 +235,8 @@ export const storageRoutes = protectedApi.group("/storage", (app) =>
             supabase,
           });
 
+          console.log(`[Tournament Upload] Generated URL: ${imageUrl}`);
+
           await db
             .update(tournamentTable)
             .set({
@@ -213,6 +244,8 @@ export const storageRoutes = protectedApi.group("/storage", (app) =>
               logoPath: tournamentLogoPath,
             })
             .where(eq(tournamentTable.id, tournamentId));
+
+          console.log(`[Tournament Upload] Database updated successfully`);
 
           return sendResponse({
             success: true,

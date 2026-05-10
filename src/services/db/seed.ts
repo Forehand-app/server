@@ -34,7 +34,6 @@ const paymentModes = [
 ];
 
 const inviteTypes = [
-  { code: "tournamentCrew", label: "Tournament Crew" },
   { code: "organization", label: "Organization" },
   { code: "event", label: "Event" },
   { code: "tournament", label: "Tournament" },

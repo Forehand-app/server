@@ -5,6 +5,8 @@ import { storageRoutes } from "@/routes/storageRoutes";
 import { optionsRoutes } from "@/routes/optionsRoutes";
 import { seed } from "@/services/db/seed";
 import { tournamentRoutes } from "./routes/tournamentRoutes";
+import { teamRoutes } from "./routes/teamRoutes";
+import { matchRoutes } from "./routes/matchRoutes";
 import { inviteRoutes } from "./routes/inviteRoutes";
 import {
   publicTestingRoutes,
@@ -20,6 +22,8 @@ seed()
       .use(userRoutes)
       .use(orgRoutes)
       .use(tournamentRoutes)
+      .use(teamRoutes)
+      .use(matchRoutes)
       .use(inviteRoutes)
       .use(storageRoutes)
       .use(optionsRoutes)
