@@ -1,24 +1,98 @@
 import { protectedApi } from "@/controller";
 import {
+  invitesTable,
+  organizationInvitesTable,
   organizationMemberTable,
   organizationTable,
+  orgTypesTable,
 } from "@/services/db/schema";
 import { sendResponse } from "@/utils/response";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { t } from "elysia";
 
 export const orgRoutes = protectedApi.group("/org", (app) =>
   app
     .get("/list", async ({ db, user }) => {
-      const orgList = await db.query.organizationTable.findMany({
-        with: {
-          orgType: true,
+      console.log("[org/list] fetching orgs", { userId: user.id });
+
+      const acceptedInviteOrgs = await db
+        .select({ organizationId: organizationInvitesTable.organizationId })
+        .from(organizationInvitesTable)
+        .innerJoin(invitesTable, eq(organizationInvitesTable.inviteId, invitesTable.id))
+        .where(
+          and(
+            eq(invitesTable.receiverId, user.id),
+            eq(invitesTable.inviteState, "accepted"),
+          ),
+        );
+
+      if (acceptedInviteOrgs.length > 0) {
+        await db
+          .insert(organizationMemberTable)
+          .values(
+            acceptedInviteOrgs.map((row) => ({
+              organizationId: row.organizationId,
+              userId: user.id,
+              isOwner: false,
+            })),
+          )
+          .onConflictDoNothing();
+      }
+
+      const rows = await db
+        .select({
+          id: organizationTable.id,
+          name: organizationTable.name,
+          description: organizationTable.description,
+          logoUrl: organizationTable.logoUrl,
+          logoPath: organizationTable.logoPath,
+          establishedYear: organizationTable.establishedYear,
+          website: organizationTable.website,
+          contactEmail: organizationTable.contactEmail,
+          contactPhone: organizationTable.contactPhone,
+          postalCode: organizationTable.postalCode,
+          state: organizationTable.state,
+          city: organizationTable.city,
+          address: organizationTable.address,
+          verified: organizationTable.verified,
+          orgTypeId: orgTypesTable.id,
+          orgTypeCode: orgTypesTable.code,
+          orgTypeLabel: orgTypesTable.label,
+        })
+        .from(organizationMemberTable)
+        .innerJoin(
+          organizationTable,
+          eq(organizationMemberTable.organizationId, organizationTable.id),
+        )
+        .innerJoin(orgTypesTable, eq(organizationTable.orgTypeId, orgTypesTable.id))
+        .where(eq(organizationMemberTable.userId, user.id));
+
+      const orgList = rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        logoUrl: row.logoUrl,
+        logoPath: row.logoPath,
+        establishedYear: row.establishedYear,
+        website: row.website,
+        contactEmail: row.contactEmail,
+        contactPhone: row.contactPhone,
+        postalCode: row.postalCode,
+        state: row.state,
+        city: row.city,
+        address: row.address,
+        verified: row.verified,
+        orgType: {
+          id: row.orgTypeId,
+          code: row.orgTypeCode,
+          label: row.orgTypeLabel,
         },
-        where: {
-          members: {
-            userId: user.id,
-          },
-        },
+      }));
+
+      console.log("[org/list] fetched", {
+        userId: user.id,
+        count: orgList.length,
+        orgIds: orgList.map((org) => org.id),
       });
 
       return sendResponse({
@@ -225,3 +299,5 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
       },
     ),
 );
+
+

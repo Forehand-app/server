@@ -1,5 +1,6 @@
 import { protectedApi } from "@/controller";
 import { inviteTypeTable } from "@/services/db/schema/lookups";
+import { organizationMemberTable } from "@/services/db/schema/organization";
 import {
   invitesTable,
   organizationInvitesTable,
@@ -452,6 +453,42 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
           })
           .where(eq(invitesTable.id, body.inviteId));
 
+        if (body.action === "accept") {
+          const [orgInvite] = await db
+            .select({ organizationId: organizationInvitesTable.organizationId })
+            .from(organizationInvitesTable)
+            .where(eq(organizationInvitesTable.inviteId, invite.id))
+            .limit(1);
+
+          console.log("[invite/respond] accept", {
+            inviteId: invite.id,
+            receiverId: user.id,
+            orgInviteOrganizationId: orgInvite?.organizationId || null,
+          });
+
+          if (orgInvite?.organizationId) {
+            await db
+              .insert(organizationMemberTable)
+              .values({
+                organizationId: orgInvite.organizationId,
+                userId: user.id,
+                isOwner: false,
+              })
+              .onConflictDoNothing();
+
+            console.log("[invite/respond] org membership upserted", {
+              inviteId: invite.id,
+              organizationId: orgInvite.organizationId,
+              userId: user.id,
+            });
+          } else {
+            console.log("[invite/respond] no organization link for invite", {
+              inviteId: invite.id,
+              userId: user.id,
+            });
+          }
+        }
+
         return sendResponse({
           success: true,
           message:
@@ -484,3 +521,7 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
       });
     }),
 );
+
+
+
+
