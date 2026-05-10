@@ -10,6 +10,7 @@ export const volunteerRoleEnum = pgEnum("volunteer_role_enum", [
 ]);
 
 export const teamStatusEnum = pgEnum("team_status_enum", [
+  "created",
   "registered",
   "participating",
   "rejected",

@@ -1,0 +1,1 @@
+ALTER TABLE "team_table_table" ALTER COLUMN "event_id" DROP NOT NULL;

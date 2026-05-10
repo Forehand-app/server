@@ -11,6 +11,7 @@ import {
   tournamentInvitesTable,
   tournamentTable,
   tournamentVolunteerTable,
+  profileTable,
 } from "@/services/db/schema";
 import { inArray, eq, notInArray, or, and } from "drizzle-orm";
 import { getDate } from "@/utils/helpers";
@@ -42,6 +43,34 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
           success: true,
           message: "Tournament retrieved successfully",
           data: tournament,
+        });
+      },
+      {
+        params: t.Object({ tournamentId: t.String() }),
+      },
+    )
+    .get(
+      "/participants/:tournamentId",
+      async ({ db, params: { tournamentId } }) => {
+        const participants = await db
+          .select({
+            user: profileTable,
+            team: teamTable,
+            event: eventTable,
+          })
+          .from(teamParticipantTable)
+          .innerJoin(teamTable, eq(teamParticipantTable.teamId, teamTable.id))
+          .innerJoin(eventTable, eq(teamTable.eventId, eventTable.id))
+          .innerJoin(
+            profileTable,
+            eq(teamParticipantTable.userId, profileTable.id),
+          )
+          .where(eq(eventTable.tournamentId, tournamentId));
+
+        return sendResponse({
+          success: true,
+          message: "Tournament participants fetched successfully",
+          data: participants,
         });
       },
       {
@@ -97,6 +126,58 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
         params: t.Object({ tournamentId: t.String() }),
       },
     )
+    .post(
+      "/update-state/:tournamentId",
+      async ({ db, user, body, params: { tournamentId } }) => {
+        const tournament = await db.query.tournamentTable.findFirst({
+          where: { id: tournamentId },
+        });
+
+        if (!tournament) {
+          return sendResponse({
+            success: false,
+            message: "Tournament not found",
+          });
+        }
+
+        const member = await db.query.organizationMemberTable.findFirst({
+          where: {
+            organizationId: tournament.organizationId,
+            userId: user.id,
+          },
+        });
+
+        if (!member) {
+          return sendResponse({
+            success: false,
+            message: "You are not eligible to update this tournament state",
+          });
+        }
+
+        await db
+          .update(tournamentTable)
+          .set({ tournamentState: body.state })
+          .where(eq(tournamentTable.id, tournamentId));
+
+        return sendResponse({
+          success: true,
+          message: `Tournament state updated to ${body.state} successfully`,
+        });
+      },
+      {
+        params: t.Object({ tournamentId: t.String() }),
+        body: t.Object({
+          state: t.Union([
+            t.Literal("drafted"),
+            t.Literal("published"),
+            t.Literal("in_progress"),
+            t.Literal("completed"),
+            t.Literal("cancelled"),
+          ]),
+        }),
+      },
+    )
+
     .delete(
       "delete/:tournamentId",
       async ({ db, user, params: { tournamentId } }) => {
@@ -506,6 +587,92 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
             return sendResponse({
               success: true,
               message: "Event and all related data deleted successfully",
+            });
+          },
+          {
+            params: t.Object({ eventId: t.String() }),
+          },
+        )
+        .post(
+          "/update-state/:eventId",
+          async ({ db, user, body, params: { eventId } }) => {
+            const event = await db.query.eventTable.findFirst({
+              where: { id: eventId },
+              with: {
+                tournament: true,
+              },
+            });
+
+            if (!event || !event.tournament) {
+              return sendResponse({
+                success: false,
+                message: "Event or related tournament not found",
+              });
+            }
+
+            const member = await db.query.organizationMemberTable.findFirst({
+              where: {
+                organizationId: event.tournament.organizationId,
+                userId: user.id,
+              },
+            });
+
+            if (!member) {
+              return sendResponse({
+                success: false,
+                message: "You are not eligible to update this event state",
+              });
+            }
+
+            await db
+              .update(eventTable)
+              .set({ eventState: body.state })
+              .where(eq(eventTable.id, eventId));
+
+            return sendResponse({
+              success: true,
+              message: `Event state updated to ${body.state} successfully`,
+            });
+          },
+          {
+            params: t.Object({ eventId: t.String() }),
+            body: t.Object({
+              state: t.Union([
+                t.Literal("created"),
+                t.Literal("registration_closed"),
+                t.Literal("participants_finalized"),
+                t.Literal("scheduled"),
+                t.Literal("in_progress"),
+                t.Literal("round_over"),
+                t.Literal("completed"),
+                t.Literal("cancelled"),
+              ]),
+            }),
+          },
+        )
+        .get(
+          "/participants/:eventId",
+          async ({ db, params: { eventId } }) => {
+            const participants = await db
+              .select({
+                user: profileTable,
+                team: teamTable,
+              })
+              .from(teamParticipantTable)
+              .innerJoin(
+                teamTable,
+                eq(teamParticipantTable.teamId, teamTable.id),
+              )
+              .innerJoin(
+                profileTable,
+                eq(teamParticipantTable.userId, profileTable.id),
+              )
+              .where(eq(teamTable.eventId, eventId));
+
+            return sendResponse({
+              success: true,
+              message: "Event participants fetched successfully",
+              data: participants,
             });
           },
           {

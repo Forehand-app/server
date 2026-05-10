@@ -122,9 +122,7 @@ export const teamTable = pgTable.withRLS("team_table_table", {
   teamTypeId: integer("team_type_id")
     .notNull()
     .references(() => teamTypesTable.id),
-  eventId: uuid("event_id")
-    .notNull()
-    .references(() => eventTable.id),
+  eventId: uuid("event_id").references(() => eventTable.id),
 
   createdAt,
   updatedAt,

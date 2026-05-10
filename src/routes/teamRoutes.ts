@@ -1,13 +1,14 @@
 import { protectedApi } from "@/controller";
 import {
   eventTable,
+  matchTable,
   teamActionLogsTable,
   teamParticipantTable,
   teamTable,
   tournamentTable,
 } from "@/services/db/schema";
 import { sendResponse } from "@/utils/response";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, or } from "drizzle-orm";
 import { t } from "elysia";
 
 export const teamRoutes = protectedApi.group("/team", (app) =>
@@ -262,6 +263,154 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
         }),
       },
     )
+    .post(
+      "/update-state/:teamId",
+      async ({ db, user, body, params: { teamId } }) => {
+        const team = await db.query.teamTable.findFirst({
+          where: { id: teamId },
+          with: {
+            event: {
+              with: {
+                tournament: true,
+              },
+            },
+          },
+        });
+
+        if (!team || !team.event || !team.event.tournament) {
+          return sendResponse({
+            success: false,
+            message: "Team or related tournament not found",
+          });
+        }
+
+        const member = await db.query.organizationMemberTable.findFirst({
+          where: {
+            organizationId: team.event.tournament.organizationId,
+            userId: user.id,
+          },
+        });
+
+        if (!member) {
+          return sendResponse({
+            success: false,
+            message: "You are not eligible to update this team state",
+          });
+        }
+
+        await db
+          .update(teamTable)
+          .set({ teamStatus: body.state })
+          .where(eq(teamTable.id, teamId));
+
+        return sendResponse({
+          success: true,
+          message: `Team status updated to ${body.state} successfully`,
+        });
+      },
+      {
+        params: t.Object({ teamId: t.String() }),
+        body: t.Object({
+          state: t.Union([
+            t.Literal("created"),
+            t.Literal("registered"),
+            t.Literal("participating"),
+            t.Literal("rejected"),
+            t.Literal("disqualified"),
+          ]),
+        }),
+      },
+    )
+    .post(
+      "/add-participant",
+      async ({ db, body }) => {
+        try {
+          const team = await db.query.teamTable.findFirst({
+            where: { id: body.teamId },
+            with: {
+              event: {
+                with: {
+                  teamType: true,
+                },
+              },
+              participants: true,
+            },
+          });
+
+          if (!team || !team.event || !team.event.teamType) {
+            return sendResponse({
+              success: false,
+              message: "Team or event details not found",
+            });
+          }
+
+          // Check capacity
+          const currentCount = team.participants.length;
+          if (team.event.teamType.code === "singles" && currentCount >= 1) {
+            return sendResponse({
+              success: false,
+              message: "Singles team is already full",
+            });
+          }
+          if (team.event.teamType.code === "doubles" && currentCount >= 2) {
+            return sendResponse({
+              success: false,
+              message: "Doubles team is already full",
+            });
+          }
+
+          // Check if user is already in this team
+          if (team.participants.some((p) => p.userId === body.userId)) {
+            return sendResponse({
+              success: false,
+              message: "User is already a participant in this team",
+            });
+          }
+
+          // Check if user is already in any team for this event
+          const existingInEvent = await db
+            .select()
+            .from(teamParticipantTable)
+            .innerJoin(teamTable, eq(teamParticipantTable.teamId, teamTable.id))
+            .where(
+              and(
+                eq(teamTable.eventId, team.eventId as string),
+                eq(teamParticipantTable.userId, body.userId),
+              ),
+            );
+
+          if (existingInEvent.length > 0) {
+            return sendResponse({
+              success: false,
+              message:
+                "User is already registered for this event in another team",
+            });
+          }
+
+          await db.insert(teamParticipantTable).values({
+            teamId: body.teamId,
+            userId: body.userId,
+          });
+
+          return sendResponse({
+            success: true,
+            message: "Participant added to team successfully",
+          });
+        } catch (error) {
+          console.error("[team/add-participant] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to add participant to team",
+          });
+        }
+      },
+      {
+        body: t.Object({
+          teamId: t.String(),
+          userId: t.String(),
+        }),
+      },
+    )
     .get(
       "/list/:eventId",
       async ({ db, params: { eventId } }) => {
@@ -285,6 +434,124 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       },
       {
         params: t.Object({ eventId: t.String() }),
+      },
+    )
+    .get(
+      "/info/:teamId",
+      async ({ db, params: { teamId } }) => {
+        const team = await db.query.teamTable.findFirst({
+          where: { id: teamId },
+          with: {
+            participants: {
+              with: {
+                user: true,
+              },
+            },
+            teamType: true,
+            event: {
+              with: {
+                tournament: true,
+              },
+            },
+          },
+        });
+
+        if (!team) {
+          return sendResponse({
+            success: false,
+            message: "Team not found",
+          });
+        }
+
+        return sendResponse({
+          success: true,
+          message: "Team fetched successfully",
+          data: team,
+        });
+      },
+      {
+        params: t.Object({ teamId: t.String() }),
+      },
+    )
+    .delete(
+      "/delete/:teamId",
+      async ({ db, user, params: { teamId } }) => {
+        try {
+          const team = await db.query.teamTable.findFirst({
+            where: { id: teamId },
+            with: {
+              event: {
+                with: {
+                  tournament: true,
+                },
+              },
+            },
+          });
+
+          if (!team || !team.event || !team.event.tournament) {
+            return sendResponse({
+              success: false,
+              message: "Team or related tournament not found",
+            });
+          }
+
+          // Check if user is a member of the organization that owns the tournament
+          const member = await db.query.organizationMemberTable.findFirst({
+            where: {
+              organizationId: team.event.tournament.organizationId,
+              userId: user.id,
+            },
+          });
+
+          if (!member) {
+            return sendResponse({
+              success: false,
+              message: "You are not eligible to delete this team",
+            });
+          }
+
+          // Check if team is in any matches
+          const matches = await db
+            .select()
+            .from(matchTable)
+            .where(
+              or(eq(matchTable.teamA, teamId), eq(matchTable.teamB, teamId)),
+            )
+            .limit(1);
+
+          if (matches.length > 0) {
+            return sendResponse({
+              success: false,
+              message: "Cannot delete team as it is already part of a match",
+            });
+          }
+
+          await db.transaction(async (tx) => {
+            await tx
+              .delete(teamParticipantTable)
+              .where(eq(teamParticipantTable.teamId, teamId));
+
+            await tx
+              .delete(teamActionLogsTable)
+              .where(eq(teamActionLogsTable.teamId, teamId));
+
+            await tx.delete(teamTable).where(eq(teamTable.id, teamId));
+          });
+
+          return sendResponse({
+            success: true,
+            message: "Team deleted successfully",
+          });
+        } catch (error) {
+          console.error("[team/delete] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to delete team",
+          });
+        }
+      },
+      {
+        params: t.Object({ teamId: t.String() }),
       },
     ),
 );
