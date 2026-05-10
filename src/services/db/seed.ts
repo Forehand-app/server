@@ -1,6 +1,7 @@
 import { db } from "@/services/db/client";
 import {
   eventFormatsTable,
+  inviteTypeTable,
   orgTypesTable,
   paymentModesTable,
   sportsOptionsTable,
@@ -32,6 +33,13 @@ const paymentModes = [
   { code: "atVenue", label: "At Venue" },
 ];
 
+const inviteTypes = [
+  { code: "tournamentCrew", label: "Tournament Crew" },
+  { code: "organization", label: "Organization" },
+  { code: "event", label: "Event" },
+  { code: "tournament", label: "Tournament" },
+];
+
 async function seedTable({
   table,
   values,
@@ -41,7 +49,8 @@ async function seedTable({
     | typeof sportsOptionsTable
     | typeof teamTypesTable
     | typeof eventFormatsTable
-    | typeof paymentModesTable;
+    | typeof paymentModesTable
+    | typeof inviteTypeTable;
   values: { code: string; label: string }[];
 }) {
   await db
@@ -66,4 +75,5 @@ export async function seed() {
   await seedTable({ table: teamTypesTable, values: teamTypes });
   await seedTable({ table: eventFormatsTable, values: eventFormats });
   await seedTable({ table: paymentModesTable, values: paymentModes });
+  await seedTable({ table: inviteTypeTable, values: inviteTypes });
 }
