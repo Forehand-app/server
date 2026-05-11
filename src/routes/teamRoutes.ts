@@ -86,7 +86,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
               .values({
                 eventId: body.eventId,
                 teamTypeId: event.teamTypeId,
-                teamStatus: "registered",
+                teamStatus: "created",
               })
               .returning({ id: teamTable.id });
 
@@ -105,7 +105,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
 
           return sendResponse({
             success: true,
-            message: "Team registered successfully",
+            message: "Team created successfully",
             data: { teamId },
           });
         } catch (error) {
