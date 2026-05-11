@@ -6,7 +6,7 @@ import {
   teamTable,
 } from "@/services/db/schema";
 import { sendResponse } from "@/utils/response";
-import { eq, and } from "drizzle-orm";
+import { eq, and, notInArray } from "drizzle-orm";
 import { t } from "elysia";
 
 export const matchRoutes = protectedApi.group("/match", (app) =>
@@ -238,10 +238,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
           await db.transaction(async (tx) => {
             // Check if set already exists
             const existingSet = await tx.query.setTable.findFirst({
-              where: {
-                matchId: body.matchId,
-                setNumber: body.setNumber,
-              },
+              where: { matchId: body.matchId, setNumber: body.setNumber },
             });
 
             if (existingSet) {
@@ -267,6 +264,10 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
 
             // If match is finished, update match state and winner
             if (body.matchFinished && body.matchWinnerId) {
+              const loserId =
+                body.matchWinnerId === match.teamA ? match.teamB : match.teamA;
+
+              // 1. Update match state and winner
               await tx
                 .update(matchTable)
                 .set({
@@ -274,6 +275,62 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
                   winnerId: body.matchWinnerId,
                 })
                 .where(eq(matchTable.id, body.matchId));
+
+              // 2. Update losing team status to eliminated
+              await tx
+                .update(teamTable)
+                .set({ teamStatus: "eliminated" })
+                .where(eq(teamTable.id, loserId));
+
+              // 3. Check if it's the last match of the round
+              const remainingMatches = await tx
+                .select()
+                .from(matchTable)
+                .where(
+                  and(
+                    eq(matchTable.eventId, match.event!.id),
+                    eq(matchTable.roundNumber, match.roundNumber),
+                    notInArray(matchTable.matchState, [
+                      "completed",
+                      "abandoned",
+                      "walkover",
+                    ]),
+                    notInArray(matchTable.id, [body.matchId]),
+                  ),
+                );
+
+              if (remainingMatches.length === 0) {
+                // Round is over
+                const totalMatchesInRound = await tx
+                  .select()
+                  .from(matchTable)
+                  .where(
+                    and(
+                      eq(matchTable.eventId, match.event!.id),
+                      eq(matchTable.roundNumber, match.roundNumber),
+                    ),
+                  );
+
+                if (totalMatchesInRound.length === 1) {
+                  // It was the final!
+                  await tx
+                    .update(eventTable)
+                    .set({
+                      eventState: "completed",
+                      winnerId: body.matchWinnerId,
+                      
+                    })
+                    .where(eq(eventTable.id, match.event!.id));
+                } else {
+                  await tx
+                    .update(eventTable)
+                    .set({
+                      eventState: "round_over",
+                      activeRound: match.roundNumber + 1,
+                    })
+                    .where(eq(eventTable.id, match.event!.id));
+                }
+              }
             }
           });
 
@@ -310,7 +367,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
       "/list/:eventId",
       async ({ db, params: { eventId } }) => {
         const matches = await db.query.matchTable.findMany({
-          where: { eventId },
+          where: { eventId: eventId },
           with: {
             sets: true,
             teamAData: {
@@ -348,10 +405,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
       "/list/:eventId",
       async ({ db, params: { eventId }, body }) => {
         const matches = await db.query.matchTable.findMany({
-          where: {
-            eventId: eventId,
-            roundNumber: body.roundNumber,
-          },
+          where: { eventId: eventId, roundNumber: body.roundNumber },
           with: {
             sets: true,
             teamAData: {
@@ -548,6 +602,286 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
             t.Literal("in_progress"),
             t.Literal("completed"),
           ]),
+        }),
+      },
+    )
+    .post(
+      "/start/:matchId",
+      async ({ db, user, params: { matchId } }) => {
+        try {
+          const match = await db.query.matchTable.findFirst({
+            where: { id: matchId },
+            with: {
+              event: {
+                with: {
+                  tournament: true,
+                },
+              },
+            },
+          });
+
+          if (!match || !match.event || !match.event.tournament) {
+            return sendResponse({
+              success: false,
+              message: "Match or related tournament not found",
+            });
+          }
+
+          const isScorer = match.scorer === user.id;
+          const member = await db.query.organizationMemberTable.findFirst({
+            where: {
+              organizationId: match.event.tournament.organizationId,
+              userId: user.id,
+            },
+          });
+
+          if (!isScorer && !member) {
+            return sendResponse({
+              success: false,
+              message: "You are not authorized to start this match",
+            });
+          }
+
+          await db.transaction(async (tx) => {
+            // Update match state
+            await tx
+              .update(matchTable)
+              .set({ matchState: "in_progress" })
+              .where(eq(matchTable.id, matchId));
+
+            // If event is not yet in_progress, set it to in_progress
+            if (match.event!.eventState !== "in_progress") {
+              await tx
+                .update(eventTable)
+                .set({ eventState: "in_progress" })
+                .where(eq(eventTable.id, match.event!.id));
+            }
+          });
+
+          return sendResponse({
+            success: true,
+            message: "Match started successfully",
+          });
+        } catch (error) {
+          console.error("[match/start] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to start match",
+          });
+        }
+      },
+      {
+        params: t.Object({ matchId: t.String() }),
+      },
+    )
+    .post(
+      "/complete/:matchId",
+      async ({ db, user, body, params: { matchId } }) => {
+        try {
+          const match = await db.query.matchTable.findFirst({
+            where: { id: matchId },
+            with: {
+              event: {
+                with: {
+                  tournament: true,
+                },
+              },
+            },
+          });
+
+          if (!match || !match.event || !match.event.tournament) {
+            return sendResponse({
+              success: false,
+              message: "Match or related tournament not found",
+            });
+          }
+
+          const isScorer = match.scorer === user.id;
+          const member = await db.query.organizationMemberTable.findFirst({
+            where: {
+              organizationId: match.event.tournament.organizationId,
+              userId: user.id,
+            },
+          });
+
+          if (!isScorer && !member) {
+            return sendResponse({
+              success: false,
+              message: "You are not authorized to complete this match",
+            });
+          }
+
+          const loserId =
+            body.winnerId === match.teamA ? match.teamB : match.teamA;
+
+          await db.transaction(async (tx) => {
+            // 1. Update match state and winner
+            await tx
+              .update(matchTable)
+              .set({
+                matchState: "completed",
+                winnerId: body.winnerId,
+              })
+              .where(eq(matchTable.id, matchId));
+
+            // 2. Update losing team status to eliminated
+            await tx
+              .update(teamTable)
+              .set({ teamStatus: "eliminated" })
+              .where(eq(teamTable.id, loserId));
+
+            // 3. Check if it's the last match of the round
+            const remainingMatches = await tx
+              .select()
+              .from(matchTable)
+              .where(
+                and(
+                  eq(matchTable.eventId, match.event!.id),
+                  eq(matchTable.roundNumber, match.roundNumber),
+                  notInArray(matchTable.matchState, [
+                    "completed",
+                    "abandoned",
+                    "walkover",
+                  ]),
+                  notInArray(matchTable.id, [matchId]),
+                ),
+              );
+
+            if (remainingMatches.length === 0) {
+              // Round is over
+              // 4. Check if it was the final round (only one match in this round)
+              const totalMatchesInRound = await tx
+                .select()
+                .from(matchTable)
+                .where(
+                  and(
+                    eq(matchTable.eventId, match.event!.id),
+                    eq(matchTable.roundNumber, match.roundNumber),
+                  ),
+                );
+
+              if (totalMatchesInRound.length === 1) {
+                // It was the final! (Assuming knockout)
+                // Actually, Phase 5 says "until only one match (the final) remains."
+                // Phase 6 says "Event Completion: Trigger: The final match of the event is completed."
+                // So if totalMatchesInRound.length === 1 and it's completed, event is completed.
+                await tx
+                  .update(eventTable)
+                  .set({
+                    eventState: "completed",
+                    winnerId: body.winnerId,
+                    
+                  })
+                  .where(eq(eventTable.id, match.event!.id));
+              } else {
+                await tx
+                  .update(eventTable)
+                  .set({
+                    eventState: "round_over",
+                    activeRound: match.roundNumber + 1,
+                  })
+                  .where(eq(eventTable.id, match.event!.id));
+              }
+            }
+          });
+
+          return sendResponse({
+            success: true,
+            message: "Match completed and states updated successfully",
+          });
+        } catch (error) {
+          console.error("[match/complete] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to complete match",
+          });
+        }
+      },
+      {
+        params: t.Object({ matchId: t.String() }),
+        body: t.Object({
+          winnerId: t.String(),
+        }),
+      },
+    )
+    .post(
+      "/set/initialize",
+      async ({ db, user, body }) => {
+        try {
+          const match = await db.query.matchTable.findFirst({
+            where: { id: body.matchId },
+            with: {
+              event: {
+                with: {
+                  tournament: true,
+                },
+              },
+            },
+          });
+
+          if (!match || !match.event || !match.event.tournament) {
+            return sendResponse({
+              success: false,
+              message: "Match or related tournament not found",
+            });
+          }
+
+          const isScorer = match.scorer === user.id;
+          const member = await db.query.organizationMemberTable.findFirst({
+            where: {
+              organizationId: match.event.tournament.organizationId,
+              userId: user.id,
+            },
+          });
+
+          if (!isScorer && !member) {
+            return sendResponse({
+              success: false,
+              message:
+                "You are not authorized to initialize sets for this match",
+            });
+          }
+
+          const existingSet = await db.query.setTable.findFirst({
+            where: { matchId: body.matchId, setNumber: body.setNumber },
+          });
+
+          if (existingSet) {
+            return sendResponse({
+              success: true,
+              message: "Set already exists",
+              data: { setId: existingSet.id },
+            });
+          }
+
+          const insertedSet = await db
+            .insert(setTable)
+            .values({
+              matchId: body.matchId,
+              setNumber: body.setNumber,
+              teamAScore: 0,
+              teamBScore: 0,
+              setStatus: "not_started",
+            })
+            .returning({ id: setTable.id });
+
+          return sendResponse({
+            success: true,
+            message: "Set initialized successfully",
+            data: { setId: insertedSet[0]!.id },
+          });
+        } catch (error) {
+          console.error("[match/set/initialize] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to initialize set",
+          });
+        }
+      },
+      {
+        body: t.Object({
+          matchId: t.String(),
+          setNumber: t.Number(),
         }),
       },
     ),

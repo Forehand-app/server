@@ -360,7 +360,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
           }
 
           // Check if user is already in this team
-          if (team.participants.some((p) => p.userId === body.userId)) {
+          if (team.participants.some((p: any) => p.userId === body.userId)) {
             return sendResponse({
               success: false,
               message: "User is already a participant in this team",
@@ -435,7 +435,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
           }
 
           // Check if user is actually in the team
-          if (!team.participants.some((p) => p.userId === body.userId)) {
+          if (!team.participants.some((p: any) => p.userId === body.userId)) {
             return sendResponse({
               success: false,
               message: "User is not a participant in this team",
@@ -524,7 +524,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       "/list/:eventId",
       async ({ db, params: { eventId } }) => {
         const teams = await db.query.teamTable.findMany({
-          where: { eventId },
+          where: { eventId: eventId },
           with: {
             participants: {
               with: {

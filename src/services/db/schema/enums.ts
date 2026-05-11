@@ -15,6 +15,7 @@ export const teamStatusEnum = pgEnum("team_status_enum", [
   "participating",
   "rejected",
   "disqualified",
+  "eliminated",
 ]);
 
 export const matchStateEnum = pgEnum("match_state_enum", [

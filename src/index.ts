@@ -5,6 +5,7 @@ import { storageRoutes } from "@/routes/storageRoutes";
 import { optionsRoutes } from "@/routes/optionsRoutes";
 import { seed } from "@/services/db/seed";
 import { tournamentRoutes } from "./routes/tournamentRoutes";
+import { eventRoutes } from "./routes/eventRoutes";
 import { teamRoutes } from "./routes/teamRoutes";
 import { matchRoutes } from "./routes/matchRoutes";
 import { inviteRoutes } from "./routes/inviteRoutes";
@@ -22,6 +23,7 @@ seed()
       .use(userRoutes)
       .use(orgRoutes)
       .use(tournamentRoutes)
+      .use(eventRoutes)
       .use(teamRoutes)
       .use(matchRoutes)
       .use(inviteRoutes)

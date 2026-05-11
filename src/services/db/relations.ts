@@ -56,6 +56,11 @@ export const relations = defineRelations(schema, (relation) => ({
       to: relation.paymentModesTable.id,
     }),
 
+    winner: relation.one.teamTable({
+      from: relation.eventTable.winnerId,
+      to: relation.teamTable.id,
+    }),
+
     teams: relation.many.teamTable(),
   },
 
