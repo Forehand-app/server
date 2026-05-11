@@ -14,6 +14,8 @@ import {
   protectedTestingRoutes,
 } from "./routes/testRoutes";
 
+const port = process.env.PORT || 8000;
+
 seed()
   .then(() => {
     console.log("Values Loaded on Database");
@@ -31,7 +33,7 @@ seed()
       .use(optionsRoutes)
       .use(protectedTestingRoutes)
       .onStart(({ server }) => console.log(`Server started on ${server?.url}`))
-      .listen(8000);
+      .listen(port);
   })
   .catch((e) => {
     console.error(e);

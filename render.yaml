@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: forehand-api
+    runtime: node
+    buildCommand: curl -fsSL https://bun.sh/install | bash && ~/.bun/bin/bun install
+    startCommand: ~/.bun/bin/bun run src/index.ts
+    plan: free
