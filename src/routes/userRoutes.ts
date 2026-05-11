@@ -1,97 +1,22 @@
 import { protectedApi } from "@/controller";
 import {
+  profileTable,
   invitesTable,
+  inviteTypeTable,
   organizationInvitesTable,
   organizationTable,
-  profileTable,
+  eventInvitesTable,
+  eventTable,
   tournamentInvitesTable,
   tournamentTable,
 } from "@/services/db/schema";
 import { getDate } from "@/utils/helpers";
 import { sendResponse } from "@/utils/response";
-import { and, eq } from "drizzle-orm";
+import { eq, and, ne, desc } from "drizzle-orm";
 import { t } from "elysia";
 
 export const userRoutes = protectedApi.group("/user", (app) =>
   app
-    .get("/notifications", async ({ user, db }) => {
-      const tournamentRows = await db
-        .select({
-          id: invitesTable.id,
-          inviteState: invitesTable.inviteState,
-          createdAt: invitesTable.createdAt,
-          sourceName: tournamentTable.name,
-        })
-        .from(invitesTable)
-        .innerJoin(
-          tournamentInvitesTable,
-          eq(invitesTable.id, tournamentInvitesTable.inviteId),
-        )
-        .innerJoin(
-          tournamentTable,
-          eq(tournamentInvitesTable.tournamentId, tournamentTable.id),
-        )
-        .where(
-          and(
-            eq(invitesTable.receiverId, user.id),
-            eq(invitesTable.inviteState, "pending"),
-          ),
-        );
-
-      const organizationRows = await db
-        .select({
-          id: invitesTable.id,
-          inviteState: invitesTable.inviteState,
-          createdAt: invitesTable.createdAt,
-          sourceName: organizationTable.name,
-        })
-        .from(invitesTable)
-        .innerJoin(
-          organizationInvitesTable,
-          eq(invitesTable.id, organizationInvitesTable.inviteId),
-        )
-        .innerJoin(
-          organizationTable,
-          eq(organizationInvitesTable.organizationId, organizationTable.id),
-        )
-        .where(
-          and(
-            eq(invitesTable.receiverId, user.id),
-            eq(invitesTable.inviteState, "pending"),
-          ),
-        );
-
-      const notifications = [
-        ...tournamentRows.map((row) => ({
-          id: row.id,
-          type: "invite",
-          title: "Tournament Crew Invite",
-          body: `You were invited to ${row.sourceName}.`,
-          source: row.sourceName,
-          createdAt: row.createdAt,
-          unread: row.inviteState === "pending",
-        })),
-        ...organizationRows.map((row) => ({
-          id: row.id,
-          type: "invite",
-          title: "Organization Invite",
-          body: `You were invited to join ${row.sourceName}.`,
-          source: row.sourceName,
-          createdAt: row.createdAt,
-          unread: row.inviteState === "pending",
-        })),
-      ].sort((a, b) => {
-        const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bt - at;
-      });
-
-      return sendResponse({
-        success: true,
-        message: "Notifications fetched",
-        data: notifications,
-      });
-    })
     .get("/profile", async ({ user, db }) => {
       const userProfile = await db.query.profileTable.findFirst({
         where: { id: user.id },
@@ -105,17 +30,98 @@ export const userRoutes = protectedApi.group("/user", (app) =>
         data: userProfile,
       });
     })
+    .get("/notifications", async ({ user, db }) => {
+      try {
+        const rows = await db
+          .select({
+            id: invitesTable.id,
+            inviteState: invitesTable.inviteState,
+            createdAt: invitesTable.createdAt,
+            senderName: profileTable.name,
+            type: inviteTypeTable.code,
+            orgName: organizationTable.name,
+            eventName: eventTable.name,
+            tournamentName: tournamentTable.name,
+          })
+          .from(invitesTable)
+          .innerJoin(profileTable, eq(invitesTable.senderId, profileTable.id))
+          .innerJoin(
+            inviteTypeTable,
+            eq(invitesTable.invteTypeId, inviteTypeTable.id),
+          )
+          .leftJoin(
+            organizationInvitesTable,
+            eq(invitesTable.id, organizationInvitesTable.inviteId),
+          )
+          .leftJoin(
+            organizationTable,
+            eq(organizationInvitesTable.organizationId, organizationTable.id),
+          )
+          .leftJoin(
+            eventInvitesTable,
+            eq(invitesTable.id, eventInvitesTable.inviteId),
+          )
+          .leftJoin(eventTable, eq(eventInvitesTable.eventId, eventTable.id))
+          .leftJoin(
+            tournamentInvitesTable,
+            eq(invitesTable.id, tournamentInvitesTable.inviteId),
+          )
+          .leftJoin(
+            tournamentTable,
+            eq(tournamentInvitesTable.tournamentId, tournamentTable.id),
+          )
+          .where(
+            and(
+              eq(invitesTable.receiverId, user.id),
+              eq(invitesTable.inviteState, "pending"),
+            ),
+          )
+          .orderBy(desc(invitesTable.createdAt));
+
+        const data = rows.map((row) => ({
+          id: row.id,
+          inviteId: row.id,
+          type: "invite",
+          title:
+            row.type === "organization"
+              ? "Organization Invite"
+              : row.type === "event"
+                ? "Team Invitation"
+                : "Tournament Crew Invite",
+          body: `${row.senderName} has invited you.`,
+          source: row.orgName || row.eventName || row.tournamentName || "",
+          createdAt: row.createdAt,
+          unread: true,
+        }));
+
+        return sendResponse({
+          success: true,
+          message: "Notifications fetched successfully",
+          data,
+        });
+      } catch (error) {
+        console.error("[user/notifications] failed", error);
+        return sendResponse({
+          success: false,
+          message: "Failed to fetch notifications",
+        });
+      }
+    })
     .post(
       "/validate-contact",
       async ({ db, body, user }) => {
-        const duplicateContact = await db.query.profileTable.findFirst({
-          where: {
-            NOT: {
-              id: user.id,
-            },
-            phone: body.data,
-          },
-        });
+        const result = await db
+          .select()
+          .from(profileTable)
+          .where(
+            and(
+              ne(profileTable.id, user.id),
+              eq(profileTable.phone, body.data),
+            ),
+          )
+          .limit(1);
+
+        const duplicateContact = result[0];
 
         const response = sendResponse(
           duplicateContact
@@ -137,6 +143,42 @@ export const userRoutes = protectedApi.group("/user", (app) =>
       {
         body: t.Object({
           data: t.String({ pattern: "^[6-9]\\d{9}$" }),
+        }),
+      },
+    )
+    .get(
+      "/userProfile/info/:identifier",
+      async ({ db, params: { identifier } }) => {
+        const isPhone = /^[6-9]\d{9}$/.test(identifier);
+
+        const profile = await db.query.profileTable.findFirst({
+          where: isPhone ? { phone: identifier } : { id: identifier },
+          columns: {
+            id: true,
+            name: true,
+            profilePicUrl: true,
+            profilePicPath: true,
+            gender: true,
+            primarySport: true,
+          },
+        });
+
+        if (!profile) {
+          return sendResponse({
+            success: false,
+            message: "User not found",
+          });
+        }
+
+        return sendResponse({
+          success: true,
+          message: "User profile found",
+          data: profile,
+        });
+      },
+      {
+        params: t.Object({
+          identifier: t.String(),
         }),
       },
     )
@@ -170,6 +212,7 @@ export const userRoutes = protectedApi.group("/user", (app) =>
         }),
       },
     )
+
     .put(
       "/update",
       async ({ user, db, body }) => {

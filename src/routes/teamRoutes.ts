@@ -580,6 +580,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
             teamType: true,
           },
         });
+        console.log(fullTeam);
 
         return sendResponse({
           success: true,
