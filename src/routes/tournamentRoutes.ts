@@ -727,6 +727,20 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
         .group("/user", (userApp) =>
           userApp
             .get("/browse", async ({ db, user }) => {
+              const userProfile = await db.query.profileTable.findFirst({
+                where: { id: user.id },
+                columns: { gender: true },
+              });
+
+              if (!userProfile) {
+                return sendResponse({
+                  success: false,
+                  message: "User profile not found",
+                });
+              }
+
+              const userGender = userProfile.gender;
+
               const joinedTournamentsQuery = await db
                 .select({ id: eventTable.tournamentId })
                 .from(teamParticipantTable)
@@ -763,9 +777,15 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
               );
               console.log("Joined tournament IDs: ", joinedTournamentIds);
 
-              const filtered = tournaments.filter(
-                (t) => !joinedTournamentIds.has(t.id),
-              );
+              const filtered = tournaments.filter((t) => {
+                if (joinedTournamentIds.has(t.id)) return false;
+
+                // Check if any event is eligible for the user's gender
+                return t.events.some(
+                  (event) =>
+                    event.gender === null || event.gender === userGender,
+                );
+              });
 
               return sendResponse({
                 success: true,
