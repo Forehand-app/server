@@ -795,7 +795,10 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
             })
             .get("/joined", async ({ db, user }) => {
               const joinedTournamentsQuery = await db
-                .select({ id: eventTable.tournamentId })
+                .select({
+                  tournamentId: eventTable.tournamentId,
+                  eventId: eventTable.id,
+                })
                 .from(teamParticipantTable)
                 .innerJoin(
                   teamTable,
@@ -804,11 +807,14 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
                 .innerJoin(eventTable, eq(teamTable.eventId, eventTable.id))
                 .where(eq(teamParticipantTable.userId, user.id));
 
-              const joinedTournamentIds = new Set(
-                joinedTournamentsQuery.map((r) => r.id),
+              const joinedTournamentIds = [
+                ...new Set(joinedTournamentsQuery.map((r) => r.tournamentId)),
+              ];
+              const joinedEventIds = new Set(
+                joinedTournamentsQuery.map((r) => r.eventId),
               );
 
-              if (joinedTournamentIds.size === 0) {
+              if (joinedTournamentIds.length === 0) {
                 return sendResponse({
                   success: true,
                   message: "No joined tournaments found",
@@ -831,12 +837,18 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
                 },
               });
 
-              const filtered = tournaments.filter(
-                (t) =>
-                  joinedTournamentIds.has(t.id) &&
-                  (t.tournamentState === "published" ||
-                    t.tournamentState === "in_progress"),
-              );
+              // Filter events within each tournament to only include those the user joined
+              const filtered = (tournaments as any[])
+                .filter(
+                  (t) =>
+                    joinedTournamentIds.includes(t.id) &&
+                    (t.tournamentState === "published" ||
+                      t.tournamentState === "in_progress"),
+                )
+                .map((t) => ({
+                  ...t,
+                  events: t.events.filter((e: any) => joinedEventIds.has(e.id)),
+                }));
 
               return sendResponse({
                 success: true,
@@ -846,7 +858,10 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
             })
             .get("/history", async ({ db, user }) => {
               const joinedTournamentsQuery = await db
-                .select({ id: eventTable.tournamentId })
+                .select({
+                  tournamentId: eventTable.tournamentId,
+                  eventId: eventTable.id,
+                })
                 .from(teamParticipantTable)
                 .innerJoin(
                   teamTable,
@@ -855,11 +870,14 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
                 .innerJoin(eventTable, eq(teamTable.eventId, eventTable.id))
                 .where(eq(teamParticipantTable.userId, user.id));
 
-              const joinedTournamentIds = new Set(
-                joinedTournamentsQuery.map((r) => r.id),
+              const joinedTournamentIds = [
+                ...new Set(joinedTournamentsQuery.map((r) => r.tournamentId)),
+              ];
+              const joinedEventIds = new Set(
+                joinedTournamentsQuery.map((r) => r.eventId),
               );
 
-              if (joinedTournamentIds.size === 0) {
+              if (joinedTournamentIds.length === 0) {
                 return sendResponse({
                   success: true,
                   message: "No historical tournaments found",
@@ -883,9 +901,12 @@ export const tournamentRoutes = protectedApi.group("/tournament", (app) =>
                 },
               });
 
-              const filtered = tournaments.filter((t) =>
-                joinedTournamentIds.has(t.id),
-              );
+              const filtered = (tournaments as any[])
+                .filter((t) => joinedTournamentIds.includes(t.id))
+                .map((t) => ({
+                  ...t,
+                  events: t.events.filter((e: any) => joinedEventIds.has(e.id)),
+                }));
 
               return sendResponse({
                 success: true,

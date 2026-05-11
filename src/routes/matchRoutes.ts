@@ -347,22 +347,33 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
     .post(
       "/list/:eventId",
       async ({ db, params: { eventId }, body }) => {
-        const matches = await db
-          .select()
-          .from(matchTable)
-          .where(
-            and(
-              eq(matchTable.eventId, eventId),
-              eq(matchTable.roundNumber, body.roundNumber),
-            ),
-          );
-
-        // Fetch detailed data for each match as select() doesn't support 'with'
-        // Alternative: Use findMany with explicit field mapping if possible, but select() is safer for now.
-        // Actually, let's try to fix the findMany callback if I can, but select is more robust for errors.
-        // User wants the data, let's give them the basic match info first.
-        // Wait, if they need participants and sets, I should use the relation API correctly.
-        console.log(matches);
+        const matches = await db.query.matchTable.findMany({
+          where: {
+            eventId: eventId,
+            roundNumber: body.roundNumber,
+          },
+          with: {
+            sets: true,
+            teamAData: {
+              with: {
+                participants: {
+                  with: {
+                    user: true,
+                  },
+                },
+              },
+            },
+            teamBData: {
+              with: {
+                participants: {
+                  with: {
+                    user: true,
+                  },
+                },
+              },
+            },
+          },
+        });
 
         return sendResponse({
           success: true,

@@ -411,6 +411,115 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
         }),
       },
     )
+    .post(
+      "/remove-participant",
+      async ({ db, user, body }) => {
+        try {
+          const team = await db.query.teamTable.findFirst({
+            where: { id: body.teamId },
+            with: {
+              participants: true,
+              event: {
+                with: {
+                  tournament: true,
+                },
+              },
+            },
+          });
+
+          if (!team || !team.event || !team.event.tournament) {
+            return sendResponse({
+              success: false,
+              message: "Team not found",
+            });
+          }
+
+          // Check if user is actually in the team
+          if (!team.participants.some((p) => p.userId === body.userId)) {
+            return sendResponse({
+              success: false,
+              message: "User is not a participant in this team",
+            });
+          }
+
+          // Authorization:
+          // 1. User is removing themselves
+          // 2. User is an organization member (admin/scorer)
+          const isSelf = user.id === body.userId;
+          const member = await db.query.organizationMemberTable.findFirst({
+            where: {
+              organizationId: team.event.tournament.organizationId,
+              userId: user.id,
+            },
+          });
+
+          if (!isSelf && !member) {
+            return sendResponse({
+              success: false,
+              message: "You are not authorized to remove this participant",
+            });
+          }
+
+          // Check if team is in any matches
+          const matches = await db
+            .select()
+            .from(matchTable)
+            .where(
+              or(
+                eq(matchTable.teamA, body.teamId),
+                eq(matchTable.teamB, body.teamId),
+              ),
+            )
+            .limit(1);
+
+          if (matches.length > 0) {
+            return sendResponse({
+              success: false,
+              message:
+                "Cannot remove participant as the team is already part of a match",
+            });
+          }
+
+          const participantCount = team.participants.length;
+
+          await db.transaction(async (tx) => {
+            await tx
+              .delete(teamParticipantTable)
+              .where(
+                and(
+                  eq(teamParticipantTable.teamId, body.teamId),
+                  eq(teamParticipantTable.userId, body.userId),
+                ),
+              );
+
+            // If it was the last participant, delete the team and logs
+            if (participantCount <= 1) {
+              await tx
+                .delete(teamActionLogsTable)
+                .where(eq(teamActionLogsTable.teamId, body.teamId));
+              await tx.delete(teamTable).where(eq(teamTable.id, body.teamId));
+            }
+          });
+
+          return sendResponse({
+            success: true,
+            message: "Participant removed successfully",
+          });
+        } catch (error) {
+          console.error("[team/remove-participant] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to remove participant",
+          });
+        }
+      },
+      {
+        body: t.Object({
+          teamId: t.String(),
+          userId: t.String(),
+        }),
+      },
+    )
     .get(
       "/list/:eventId",
       async ({ db, params: { eventId } }) => {
@@ -430,6 +539,52 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
           success: true,
           message: "Teams fetched successfully",
           data: teams,
+        });
+      },
+      {
+        params: t.Object({ eventId: t.String() }),
+      },
+    )
+    .get(
+      "/my-team/:eventId",
+      async ({ db, user, params: { eventId } }) => {
+        const result = await db
+          .select()
+          .from(teamParticipantTable)
+          .innerJoin(teamTable, eq(teamParticipantTable.teamId, teamTable.id))
+          .where(
+            and(
+              eq(teamParticipantTable.userId, user.id),
+              eq(teamTable.eventId, eventId),
+            ),
+          )
+          .limit(1);
+
+        if (result.length === 0 || !result[0]) {
+          return sendResponse({
+            success: false,
+            message: "User is not in any team for this event",
+          });
+        }
+
+        const teamId = result[0].team_participant_table.teamId;
+
+        const fullTeam = await db.query.teamTable.findFirst({
+          where: { id: teamId },
+          with: {
+            participants: {
+              with: {
+                user: true,
+              },
+            },
+            teamType: true,
+          },
+        });
+
+        return sendResponse({
+          success: true,
+          message: "My team fetched successfully",
+          data: fullTeam,
         });
       },
       {

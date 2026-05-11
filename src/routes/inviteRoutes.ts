@@ -540,6 +540,83 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
         }),
       },
     )
+    .get(
+      "/event/team/:eventId",
+      async ({ user, db, params: { eventId } }) => {
+        const rows = await db
+          .select({
+            invite: invitesTable,
+            receiver: profileTable,
+          })
+          .from(eventInvitesTable)
+          .innerJoin(
+            invitesTable,
+            eq(eventInvitesTable.inviteId, invitesTable.id),
+          )
+          .innerJoin(profileTable, eq(invitesTable.receiverId, profileTable.id))
+          .where(
+            and(
+              eq(eventInvitesTable.eventId, eventId),
+              eq(invitesTable.senderId, user.id),
+            ),
+          )
+          .orderBy(desc(invitesTable.createdAt));
+
+        return sendResponse({
+          success: true,
+          message: "Event team invites fetched successfully",
+          data: rows,
+        });
+      },
+      {
+        params: t.Object({ eventId: t.String() }),
+      },
+    )
+    .delete(
+      "/delete/:inviteId",
+      async ({ user, db, params: { inviteId } }) => {
+        const invite = await db.query.invitesTable.findFirst({
+          where: { id: inviteId },
+        });
+
+        if (!invite) {
+          return sendResponse({
+            success: false,
+            message: "Invite not found.",
+          });
+        }
+
+        if (invite.senderId !== user.id) {
+          return sendResponse({
+            success: false,
+            message: "You are not allowed to delete this invite.",
+          });
+        }
+
+        await db.transaction(async (tx) => {
+          // Delete from specific join tables first
+          await tx
+            .delete(eventInvitesTable)
+            .where(eq(eventInvitesTable.inviteId, inviteId));
+          await tx
+            .delete(organizationInvitesTable)
+            .where(eq(organizationInvitesTable.inviteId, inviteId));
+          await tx
+            .delete(tournamentInvitesTable)
+            .where(eq(tournamentInvitesTable.inviteId, inviteId));
+
+          await tx.delete(invitesTable).where(eq(invitesTable.id, inviteId));
+        });
+
+        return sendResponse({
+          success: true,
+          message: "Invite deleted successfully.",
+        });
+      },
+      {
+        params: t.Object({ inviteId: t.String() }),
+      },
+    )
     .post(
       "/respond",
       async ({ user, db, body }) => {
