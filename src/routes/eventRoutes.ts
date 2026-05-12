@@ -234,6 +234,68 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
       },
     )
     .post(
+      "/update-due-date/:eventId",
+      async ({ db, user, body, params: { eventId } }) => {
+        const event = await db.query.eventTable.findFirst({
+          where: ((table: any, { eq }: any) => eq(table.id, eventId)) as any,
+          with: {
+            tournament: true,
+          },
+        });
+
+        if (!event || !event.tournament) {
+          return sendResponse({
+            success: false,
+            message: "Event or related tournament not found",
+          });
+        }
+
+        const member = await db.query.organizationMemberTable.findFirst({
+          where: ((table: any, { eq, and }: any) =>
+            and(
+              eq(table.organizationId, event.tournament!.organizationId),
+              eq(table.userId, user.id),
+            )) as any,
+        });
+
+        if (!member) {
+          return sendResponse({
+            success: false,
+            message: "You are not eligible to update this event",
+          });
+        }
+
+        const newDueDate = getDate(body.dueDate);
+        const eventStartDate = getDate(String(event.startDate));
+        if (newDueDate.getTime() > eventStartDate.getTime()) {
+          return sendResponse({
+            success: false,
+            message: "Due date cannot be after event start date",
+          });
+        }
+
+        await db
+          .update(eventTable)
+          .set({ dueDate: newDueDate })
+          .where(eq(eventTable.id, eventId));
+
+        return sendResponse({
+          success: true,
+          message: "Event due date updated successfully",
+          data: {
+            eventId,
+            dueDate: body.dueDate,
+          },
+        });
+      },
+      {
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
+        body: t.Object({
+          dueDate: t.String(),
+        }),
+      },
+    )
+    .post(
       "/update-state/:eventId",
       async ({ db, user, body, params: { eventId } }) => {
         const event = await db.query.eventTable.findFirst({
