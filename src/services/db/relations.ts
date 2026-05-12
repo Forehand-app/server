@@ -62,6 +62,7 @@ export const relations = defineRelations(schema, (relation) => ({
     }),
 
     teams: relation.many.teamTable(),
+    matches: relation.many.matchTable(),
   },
 
   teamTable: {

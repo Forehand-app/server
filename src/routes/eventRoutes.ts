@@ -316,6 +316,244 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
         params: t.Object({ eventId: t.String({ format: "uuid" }) }),
       },
     )
+    .get(
+      "/results/:eventId",
+      async ({ db, params: { eventId } }) => {
+        try {
+          const event = await db.query.eventTable.findFirst({
+            where: ((table: any, { eq }: any) =>
+              eq(table.id, eventId)) as any,
+            with: {
+              tournament: true,
+              teams: {
+                with: {
+                  participants: {
+                    with: {
+                      user: true,
+                    },
+                  },
+                },
+              },
+              winner: {
+                with: {
+                  participants: {
+                    with: {
+                      user: true,
+                    },
+                  },
+                },
+              },
+              matches: {
+                with: {
+                  sets: true,
+                  teamAData: {
+                    with: {
+                      participants: {
+                        with: {
+                          user: true,
+                        },
+                      },
+                    },
+                  },
+                  teamBData: {
+                    with: {
+                      participants: {
+                        with: {
+                          user: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          if (!event) {
+            return sendResponse({
+              success: false,
+              message: "Event not found",
+            });
+          }
+
+          const getTeamMeta = (team: any) => {
+            const participants = team?.participants ?? [];
+            const names = participants
+              .map((p: any) => p?.user?.name)
+              .filter(Boolean) as string[];
+            const avatarUrl =
+              participants.find((p: any) => p?.user?.profilePicUrl)?.user
+                ?.profilePicUrl ?? null;
+
+            return {
+              id: team?.id,
+              name: names.length > 0 ? names.join(" / ") : "Unknown Team",
+              avatarUrl,
+              players: participants
+                .map((p: any) => ({
+                  id: p?.user?.id ?? null,
+                  name: p?.user?.name ?? "Unknown Player",
+                  avatarUrl: p?.user?.profilePicUrl ?? null,
+                }))
+                .filter((p: any) => p.id !== null),
+            };
+          };
+
+          const statsByTeam = new Map<string, any>();
+
+          for (const team of event.teams ?? []) {
+            const meta = getTeamMeta(team);
+            if (!meta.id) continue;
+            statsByTeam.set(meta.id, {
+              teamId: meta.id,
+              teamName: meta.name,
+              avatarUrl: meta.avatarUrl,
+              players: meta.players,
+              played: 0,
+              wins: 0,
+              losses: 0,
+              setsWon: 0,
+              setsLost: 0,
+              pointsFor: 0,
+              pointsAgainst: 0,
+            });
+          }
+
+          for (const match of event.matches ?? []) {
+            const teamAId = match.teamA;
+            const teamBId = match.teamB;
+            if (!teamAId || !teamBId) continue;
+
+            if (!statsByTeam.has(teamAId)) {
+              const meta = getTeamMeta(match.teamAData);
+              statsByTeam.set(teamAId, {
+                teamId: teamAId,
+                teamName: meta.name,
+                avatarUrl: meta.avatarUrl,
+                players: meta.players,
+                played: 0,
+                wins: 0,
+                losses: 0,
+                setsWon: 0,
+                setsLost: 0,
+                pointsFor: 0,
+                pointsAgainst: 0,
+              });
+            }
+            if (!statsByTeam.has(teamBId)) {
+              const meta = getTeamMeta(match.teamBData);
+              statsByTeam.set(teamBId, {
+                teamId: teamBId,
+                teamName: meta.name,
+                avatarUrl: meta.avatarUrl,
+                players: meta.players,
+                played: 0,
+                wins: 0,
+                losses: 0,
+                setsWon: 0,
+                setsLost: 0,
+                pointsFor: 0,
+                pointsAgainst: 0,
+              });
+            }
+
+            const a = statsByTeam.get(teamAId);
+            const b = statsByTeam.get(teamBId);
+            if (!a || !b) continue;
+
+            const isPlayed = ["completed", "walkover", "abandoned"].includes(
+              match.matchState,
+            );
+            if (isPlayed) {
+              a.played += 1;
+              b.played += 1;
+            }
+
+            for (const set of match.sets ?? []) {
+              const aScore = set.teamAScore ?? 0;
+              const bScore = set.teamBScore ?? 0;
+              a.pointsFor += aScore;
+              a.pointsAgainst += bScore;
+              b.pointsFor += bScore;
+              b.pointsAgainst += aScore;
+
+              if ((set.setStatus ?? "") !== "completed") continue;
+              if (aScore > bScore) {
+                a.setsWon += 1;
+                b.setsLost += 1;
+              } else if (bScore > aScore) {
+                b.setsWon += 1;
+                a.setsLost += 1;
+              }
+            }
+
+            if (match.winnerId && statsByTeam.has(match.winnerId)) {
+              const winner = statsByTeam.get(match.winnerId);
+              const loser = match.winnerId === teamAId ? b : a;
+              winner.wins += 1;
+              loser.losses += 1;
+            }
+          }
+
+          const standings = Array.from(statsByTeam.values())
+            .map((row) => ({
+              ...row,
+              setDiff: row.setsWon - row.setsLost,
+              pointDiff: row.pointsFor - row.pointsAgainst,
+            }))
+            .sort((x, y) => {
+              if (y.wins !== x.wins) return y.wins - x.wins;
+              if (y.setDiff !== x.setDiff) return y.setDiff - x.setDiff;
+              if (y.pointDiff !== x.pointDiff) return y.pointDiff - x.pointDiff;
+              return x.teamName.localeCompare(y.teamName);
+            })
+            .map((row, index) => ({
+              ...row,
+              rank: index + 1,
+              label:
+                index === 0
+                  ? "Winner"
+                  : index === 1
+                    ? "Runner Up"
+                    : index === 2
+                      ? "Third Place"
+                      : null,
+            }));
+
+          const championTeamId = event.winnerId || standings[0]?.teamId || null;
+          const champion =
+            standings.find((s) => s.teamId === championTeamId) ||
+            standings[0] ||
+            null;
+
+          return sendResponse({
+            success: true,
+            message: "Event results fetched successfully",
+            data: {
+              event: {
+                id: event.id,
+                name: event.name,
+                eventState: event.eventState,
+                tournamentId: event.tournamentId,
+              },
+              champion,
+              standings,
+              totalTeams: standings.length,
+              totalMatches: (event.matches ?? []).length,
+            },
+          });
+        } catch (error) {
+          console.error("[event/results] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to fetch event results",
+          });
+        }
+      },
+      {
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
+      },
+    )
     .post(
       "/finalize-participants/:eventId",
       async ({ db, user, params: { eventId } }) => {
