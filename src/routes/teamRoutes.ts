@@ -18,7 +18,8 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       async ({ user, db, body }) => {
         try {
           const event = await db.query.eventTable.findFirst({
-            where: { id: body.eventId },
+            where: ((table: any, { eq }: any) =>
+              eq(table.id, body.eventId)) as any,
             with: {
               teamType: true,
             },
@@ -118,7 +119,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       },
       {
         body: t.Object({
-          eventId: t.String(),
+          eventId: t.String({ format: "uuid" }),
           participantIds: t.Array(t.String(), { minItems: 1, maxItems: 2 }),
         }),
       },
@@ -128,7 +129,8 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       async ({ user, db, body }) => {
         try {
           const team = await db.query.teamTable.findFirst({
-            where: { id: body.teamId },
+            where: ((table: any, { eq }: any) =>
+              eq(table.id, body.teamId)) as any,
             with: {
               event: {
                 with: {
@@ -147,10 +149,14 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
 
           // Check if user is a member of the organization that owns the tournament
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: team.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  team.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!member) {
@@ -189,7 +195,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       },
       {
         body: t.Object({
-          teamId: t.String(),
+          teamId: t.String({ format: "uuid" }),
         }),
       },
     )
@@ -198,7 +204,8 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       async ({ user, db, body }) => {
         try {
           const team = await db.query.teamTable.findFirst({
-            where: { id: body.teamId },
+            where: ((table: any, { eq }: any) =>
+              eq(table.id, body.teamId)) as any,
             with: {
               event: {
                 with: {
@@ -216,10 +223,14 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
           }
 
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: team.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  team.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!member) {
@@ -258,7 +269,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       },
       {
         body: t.Object({
-          teamId: t.String(),
+          teamId: t.String({ format: "uuid" }),
           reason: t.String(),
         }),
       },
@@ -309,7 +320,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
         });
       },
       {
-        params: t.Object({ teamId: t.String() }),
+        params: t.Object({ teamId: t.String({ format: "uuid" }) }),
         body: t.Object({
           state: t.Union([
             t.Literal("created"),
@@ -406,7 +417,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       },
       {
         body: t.Object({
-          teamId: t.String(),
+          teamId: t.String({ format: "uuid" }),
           userId: t.String(),
         }),
       },
@@ -447,10 +458,14 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
           // 2. User is an organization member (admin/scorer)
           const isSelf = user.id === body.userId;
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: team.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  team.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!isSelf && !member) {
@@ -515,7 +530,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
       },
       {
         body: t.Object({
-          teamId: t.String(),
+          teamId: t.String({ format: "uuid" }),
           userId: t.String(),
         }),
       },
@@ -542,7 +557,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
         });
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
       },
     )
     .get(
@@ -589,7 +604,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
         });
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
       },
     )
     .get(
@@ -626,7 +641,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
         });
       },
       {
-        params: t.Object({ teamId: t.String() }),
+        params: t.Object({ teamId: t.String({ format: "uuid" }) }),
       },
     )
     .delete(
@@ -653,10 +668,14 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
 
           // Check if user is a member of the organization that owns the tournament
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: team.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  team.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!member) {
@@ -707,7 +726,7 @@ export const teamRoutes = protectedApi.group("/team", (app) =>
         }
       },
       {
-        params: t.Object({ teamId: t.String() }),
+        params: t.Object({ teamId: t.String({ format: "uuid" }) }),
       },
     ),
 );

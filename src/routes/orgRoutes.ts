@@ -1,13 +1,16 @@
 import { protectedApi } from "@/controller";
 import {
+  eventTable,
   invitesTable,
+  matchTable,
   organizationInvitesTable,
   organizationMemberTable,
   organizationTable,
   orgTypesTable,
+  tournamentTable,
 } from "@/services/db/schema";
 import { sendResponse } from "@/utils/response";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { t } from "elysia";
 
 export const orgRoutes = protectedApi.group("/org", (app) =>
@@ -18,7 +21,10 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
       const acceptedInviteOrgs = await db
         .select({ organizationId: organizationInvitesTable.organizationId })
         .from(organizationInvitesTable)
-        .innerJoin(invitesTable, eq(organizationInvitesTable.inviteId, invitesTable.id))
+        .innerJoin(
+          invitesTable,
+          eq(organizationInvitesTable.inviteId, invitesTable.id),
+        )
         .where(
           and(
             eq(invitesTable.receiverId, user.id),
@@ -64,7 +70,10 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
           organizationTable,
           eq(organizationMemberTable.organizationId, organizationTable.id),
         )
-        .innerJoin(orgTypesTable, eq(organizationTable.orgTypeId, orgTypesTable.id))
+        .innerJoin(
+          orgTypesTable,
+          eq(organizationTable.orgTypeId, orgTypesTable.id),
+        )
         .where(eq(organizationMemberTable.userId, user.id));
 
       const orgList = rows.map((row) => ({
@@ -105,7 +114,8 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
       "/register",
       async ({ db, user, body }) => {
         const orgTypeId = await db.query.orgTypesTable.findFirst({
-          where: { code: body.orgTypeCode },
+          where: ((table: any, { eq }: any) =>
+            eq(table.code, body.orgTypeCode)) as any,
         });
         if (!orgTypeId)
           return sendResponse({
@@ -179,7 +189,8 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
       "/update",
       async ({ db, body, user }) => {
         const orgTypeId = await db.query.orgTypesTable.findFirst({
-          where: { code: body.orgTypeCode },
+          where: ((table: any, { eq }: any) =>
+            eq(table.code, body.orgTypeCode)) as any,
         });
         if (!orgTypeId)
           return sendResponse({
@@ -187,10 +198,11 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
             message: "Invalid organization type",
           });
         const member = await db.query.organizationMemberTable.findFirst({
-          where: {
-            organizationId: body.id,
-            userId: user.id,
-          },
+          where: ((table: any, { eq, and }: any) =>
+            and(
+              eq(table.organizationId, body.id),
+              eq(table.userId, user.id),
+            )) as any,
         });
 
         if (!member)
@@ -255,10 +267,11 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
       "/info/:orgId",
       async ({ db, user, params: { orgId } }) => {
         const member = await db.query.organizationMemberTable.findFirst({
-          where: {
-            organizationId: orgId,
-            userId: user.id,
-          },
+          where: ((table: any, { eq, and }: any) =>
+            and(
+              eq(table.organizationId, orgId),
+              eq(table.userId, user.id),
+            )) as any,
         });
 
         if (!member)
@@ -270,9 +283,7 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
         console.log("is member");
 
         const organizationData = await db.query.organizationTable.findFirst({
-          where: {
-            id: orgId,
-          },
+          where: ((table: any, { eq }: any) => eq(table.id, orgId)) as any,
           with: {
             orgType: true,
           },
@@ -294,10 +305,150 @@ export const orgRoutes = protectedApi.group("/org", (app) =>
       },
       {
         params: t.Object({
-          orgId: t.String(),
+          orgId: t.String({ format: "uuid" }),
+        }),
+      },
+    )
+    .get(
+      "/:orgId/matches/live",
+      async ({ db, user, params: { orgId } }) => {
+        try {
+          // 1. Verify organization membership
+          const member = await db.query.organizationMemberTable.findFirst({
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(table.organizationId, orgId),
+                eq(table.userId, user.id),
+              )) as any,
+          });
+
+          if (!member) {
+            return sendResponse({
+              success: false,
+              message: "You are not a member of this organization",
+            });
+          }
+
+          // 2. Get all tournament IDs for this organization
+          const tournaments = await db.query.tournamentTable.findMany({
+            where: ((table: any, { eq }: any) =>
+              eq(table.organizationId, orgId)) as any,
+            columns: { id: true, name: true },
+          });
+
+          const tournamentIds = tournaments.map((t) => t.id);
+
+          if (tournamentIds.length === 0) {
+            return sendResponse({
+              success: true,
+              message: "No tournaments found for this organization",
+              data: [],
+            });
+          }
+
+          // 3. Fetch all in_progress matches for these tournaments
+          const liveMatches = await db.query.matchTable.findMany({
+            where: ((match: any, { eq, and, inArray }: any) =>
+              and(
+                eq(match.matchState, "in_progress"),
+                inArray(
+                  match.eventId,
+                  db
+                    .select({ id: eventTable.id })
+                    .from(eventTable)
+                    .where(inArray(eventTable.tournamentId, tournamentIds)),
+                ),
+              )) as any,
+            with: {
+              event: {
+                with: {
+                  tournament: true,
+                },
+              },
+              teamAData: {
+                with: {
+                  participants: {
+                    with: {
+                      user: true,
+                    },
+                  },
+                },
+              },
+              teamBData: {
+                with: {
+                  participants: {
+                    with: {
+                      user: true,
+                    },
+                  },
+                },
+              },
+              sets: true,
+            },
+          });
+
+          // 4. Group by tournament
+          const groupedData: Record<string, any> = {};
+
+          liveMatches.forEach((match: any) => {
+            const tId = match.event.tournament.id;
+            if (!groupedData[tId]) {
+              groupedData[tId] = {
+                tournamentId: tId,
+                tournamentName: match.event.tournament.name,
+                matches: [],
+              };
+            }
+
+            const currentSet =
+              match.sets.find((s: any) => s.setStatus === "in_progress") ||
+              match.sets[match.sets.length - 1];
+
+            const teamAPlayers = match.teamAData.participants.map(
+              (p: any) => p.user.name,
+            );
+            const teamBPlayers = match.teamBData.participants.map(
+              (p: any) => p.user.name,
+            );
+
+            groupedData[tId].matches.push({
+              id: match.id,
+              matchTitle: `${match.event.name} · Match #${match.id.split("-")[0]}`,
+              teamA: {
+                name: teamAPlayers.join(" & ") || `Team A`,
+                players: teamAPlayers,
+              },
+              teamB: {
+                name: teamBPlayers.join(" & ") || `Team B`,
+                players: teamBPlayers,
+              },
+              score: {
+                teamA: currentSet ? currentSet.teamAScore : 0,
+                teamB: currentSet ? currentSet.teamBScore : 0,
+                currentSet: currentSet ? currentSet.setNumber : 1,
+              },
+              court: "Court TBD",
+              isLive: true,
+            });
+          });
+
+          return sendResponse({
+            success: true,
+            message: "Organization live matches fetched successfully",
+            data: Object.values(groupedData),
+          });
+        } catch (error) {
+          console.error("[org/matches/live] failed", error);
+          return sendResponse({
+            success: false,
+            message: "Failed to fetch organization live matches",
+          });
+        }
+      },
+      {
+        params: t.Object({
+          orgId: t.String({ format: "uuid" }),
         }),
       },
     ),
 );
-
-

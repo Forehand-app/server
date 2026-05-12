@@ -20,18 +20,26 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
       "/create",
       async ({ user, db, body }) => {
         for (const event of body) {
-          const member = await db.query.tournamentTable.findFirst({
-            where: {
-              id: event.tournamentId,
+          const tournament = await db.query.tournamentTable.findFirst({
+            where: ((table: any, { eq }: any) =>
+              eq(table.id, event.tournamentId)) as any,
+            with: {
               organization: {
-                members: {
-                  userId: user.id,
+                with: {
+                  members: {
+                    where: ((table: any, { eq }: any) =>
+                      eq(table.userId, user.id)) as any,
+                  },
                 },
               },
             },
           });
 
-          if (!member) {
+          if (
+            !tournament ||
+            !tournament.organization ||
+            tournament.organization.members.length === 0
+          ) {
             return sendResponse({
               success: false,
               message: "You are not eligible to create these event",
@@ -39,27 +47,24 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
           }
 
           const sport = await db.query.sportsOptionsTable.findFirst({
-            where: {
-              code: event.sportsOptionCode,
-            },
+            where: ((table: any, { eq }: any) =>
+              eq(table.code, event.sportsOptionCode)) as any,
             columns: {
               id: true,
             },
           });
 
           const eventFormat = await db.query.eventFormatsTable.findFirst({
-            where: {
-              code: event.eventFormatCode,
-            },
+            where: ((table: any, { eq }: any) =>
+              eq(table.code, event.eventFormatCode)) as any,
             columns: {
               id: true,
             },
           });
 
           const teamType = await db.query.teamTypesTable.findFirst({
-            where: {
-              code: event.teamTypeCode,
-            },
+            where: ((table: any, { eq }: any) =>
+              eq(table.code, event.teamTypeCode)) as any,
             columns: {
               id: true,
             },
@@ -68,9 +73,8 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
           const paymentMode =
             event.paymentModeCode !== null
               ? await db.query.paymentModesTable.findFirst({
-                  where: {
-                    code: event.paymentModeCode,
-                  },
+                  where: ((table: any, { eq }: any) =>
+                    eq(table.code, event.paymentModeCode)) as any,
                   columns: {
                     id: true,
                   },
@@ -120,7 +124,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
       {
         body: t.Array(
           t.Object({
-            tournamentId: t.String(),
+            tournamentId: t.String({ format: "uuid" }),
             name: t.String(),
             sportsOptionCode: t.String(),
             eventFormatCode: t.String(),
@@ -226,14 +230,14 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
         });
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
       },
     )
     .post(
       "/update-state/:eventId",
       async ({ db, user, body, params: { eventId } }) => {
         const event = await db.query.eventTable.findFirst({
-          where: { id: eventId },
+          where: ((table: any, { eq }: any) => eq(table.id, eventId)) as any,
           with: {
             tournament: true,
           },
@@ -247,10 +251,11 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
         }
 
         const member = await db.query.organizationMemberTable.findFirst({
-          where: {
-            organizationId: event.tournament.organizationId,
-            userId: user.id,
-          },
+          where: ((table: any, { eq, and }: any) =>
+            and(
+              eq(table.organizationId, event.tournament!.organizationId),
+              eq(table.userId, user.id),
+            )) as any,
         });
 
         if (!member) {
@@ -271,7 +276,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
         });
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
         body: t.Object({
           state: t.Union([
             t.Literal("created"),
@@ -290,7 +295,8 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
       "/participants/:eventId",
       async ({ db, params: { eventId } }) => {
         const participants = await db.query.teamTable.findMany({
-          where: { eventId: eventId },
+          where: ((table: any, { eq }: any) =>
+            eq(table.eventId, eventId)) as any,
           with: {
             participants: {
               with: {
@@ -307,7 +313,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
         });
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
       },
     )
     .post(
@@ -315,7 +321,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
       async ({ db, user, params: { eventId } }) => {
         try {
           const event = await db.query.eventTable.findFirst({
-            where: { id: eventId },
+            where: ((table: any, { eq }: any) => eq(table.id, eventId)) as any,
             with: {
               tournament: true,
             },
@@ -329,12 +335,12 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
           }
 
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(table.organizationId, event.tournament!.organizationId),
+                eq(table.userId, user.id),
+              )) as any,
           });
-
           if (!member) {
             return sendResponse({
               success: false,
@@ -380,7 +386,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
         }
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
       },
     )
     .post(
@@ -388,7 +394,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
       async ({ db, user, body, params: { eventId } }) => {
         try {
           const event = await db.query.eventTable.findFirst({
-            where: { id: eventId },
+            where: ((table: any, { eq }: any) => eq(table.id, eventId)) as any,
             with: {
               tournament: true,
             },
@@ -402,12 +408,12 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
           }
 
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(table.organizationId, event.tournament!.organizationId),
+                eq(table.userId, user.id),
+              )) as any,
           });
-
           if (!member) {
             return sendResponse({
               success: false,
@@ -451,7 +457,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
         }
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
         body: t.Object({
           matches: t.Array(
             t.Object({
@@ -478,7 +484,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
       async ({ db, user, body, params: { eventId } }) => {
         try {
           const event = await db.query.eventTable.findFirst({
-            where: { id: eventId },
+            where: ((table: any, { eq }: any) => eq(table.id, eventId)) as any,
             with: {
               tournament: true,
             },
@@ -492,12 +498,12 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
           }
 
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(table.organizationId, event.tournament!.organizationId),
+                eq(table.userId, user.id),
+              )) as any,
           });
-
           if (!member) {
             return sendResponse({
               success: false,
@@ -526,7 +532,7 @@ export const eventRoutes = protectedApi.group("/event", (app) =>
         }
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
         body: t.Object({
           winnerId: t.String(),
           runnerUpId: t.String(),

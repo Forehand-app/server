@@ -3,12 +3,39 @@ import Elysia from "elysia";
 import { supabase } from "./services/supabase/client";
 import { db } from "./services/db/client";
 import { logger } from "@rasla/logify";
+import { sendResponse } from "./utils/response";
 
 const baseApi = new Elysia()
   .use(logger())
   .use(cors())
   .decorate("supabase", supabase)
-  .decorate("db", db);
+  .decorate("db", db)
+  .onError(({ error, set }) => {
+    console.error("API Error:", error);
+    set.status = 500;
+
+    const errorBody = error as any;
+    const message =
+      errorBody?.message ||
+      (typeof errorBody?.toString === "function"
+        ? errorBody.toString()
+        : "Internal Server Error");
+
+    if (
+      typeof message === "string" &&
+      message.includes("invalid input syntax for type uuid")
+    ) {
+      set.status = 400;
+      return sendResponse({
+        success: false,
+        message: "Invalid ID format. Expected a UUID.",
+      });
+    }
+    return sendResponse({
+      success: false,
+      message: typeof message === "string" ? message : "Internal Server Error",
+    });
+  });
 
 export const publicApi = new Elysia()
   .use(logger())

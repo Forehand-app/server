@@ -4,6 +4,7 @@ import {
   setTable,
   eventTable,
   teamTable,
+  organizationMemberTable,
 } from "@/services/db/schema";
 import { sendResponse } from "@/utils/response";
 import { eq, and, notInArray } from "drizzle-orm";
@@ -34,10 +35,11 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
 
             // Check if user is eligible to create matches (org member)
             const member = await db.query.organizationMemberTable.findFirst({
-              where: {
-                organizationId: event.tournament.organizationId,
-                userId: user.id,
-              },
+              where: ((table: any, { eq, and }: any) =>
+                and(
+                  eq(table.organizationId, event.tournament!.organizationId),
+                  eq(table.userId, user.id),
+                )) as any,
             });
 
             if (!member) {
@@ -48,7 +50,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
               continue;
             }
 
-            const matchId = await db.transaction(async (tx) => {
+            const matchId = await db.transaction(async (tx: any) => {
               const insertedMatches = await tx
                 .insert(matchTable)
                 .values({
@@ -128,7 +130,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
     )
     .post(
       "/update-state/:matchId",
-      async ({ user, db, body, params: { matchId } }) => {
+      async ({ user, db, body, params: { matchId }, server }: any) => {
         try {
           const match = await db.query.matchTable.findFirst({
             where: { id: matchId },
@@ -151,10 +153,14 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
           // Allow scorer or org member to update state
           const isScorer = match.scorer === user.id;
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: match.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  match.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!isScorer && !member) {
@@ -171,6 +177,23 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
               winnerId: body.winnerId ?? null,
             })
             .where(eq(matchTable.id, matchId));
+
+          // Broadcast match state update
+          const tournamentId = match.event.tournament.id;
+          const broadcastData = {
+            type: "MATCH_STATE_UPDATE",
+            data: {
+              tournamentId: tournamentId,
+              matchId: matchId,
+              state: body.state,
+              winnerId: body.winnerId ?? null,
+            },
+          };
+          server?.publish(`match:${matchId}`, JSON.stringify(broadcastData));
+          server?.publish(
+            `tournament:${tournamentId}`,
+            JSON.stringify(broadcastData),
+          );
 
           return sendResponse({
             success: true,
@@ -200,10 +223,11 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
     )
     .post(
       "/update-score",
-      async ({ user, db, body }) => {
+      async ({ user, db, body, server }: any) => {
         try {
           const match = await db.query.matchTable.findFirst({
-            where: { id: body.matchId },
+            where: ((table: any, { eq }: any) =>
+              eq(table.id, body.matchId)) as any,
             with: {
               event: {
                 with: {
@@ -213,19 +237,30 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
             },
           });
 
-          if (!match || !match.event || !match.event.tournament) {
+          if (!match) {
             return sendResponse({
               success: false,
-              message: "Match or related tournament not found",
+              message: `Match not found for ID: ${body.matchId}`,
+            });
+          }
+
+          if (!match.event || !match.event.tournament) {
+            return sendResponse({
+              success: false,
+              message: "Related event or tournament not found for this match",
             });
           }
 
           const isScorer = match.scorer === user.id;
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: match.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  match.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!isScorer && !member) {
@@ -235,10 +270,14 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
             });
           }
 
-          await db.transaction(async (tx) => {
+          await db.transaction(async (tx: any) => {
             // Check if set already exists
             const existingSet = await tx.query.setTable.findFirst({
-              where: { matchId: body.matchId, setNumber: body.setNumber },
+              where: ((table: any, { eq, and }: any) =>
+                and(
+                  eq(table.matchId, body.matchId),
+                  eq(table.setNumber, body.setNumber),
+                )) as any,
             });
 
             if (existingSet) {
@@ -318,7 +357,6 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
                     .set({
                       eventState: "completed",
                       winnerId: body.matchWinnerId,
-                      
                     })
                     .where(eq(eventTable.id, match.event!.id));
                 } else {
@@ -334,21 +372,47 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
             }
           });
 
+          // Broadcast score update
+          const tournamentId = match.event!.tournament!.id;
+          const broadcastData = {
+            type: "SCORE_UPDATE",
+            data: {
+              tournamentId: tournamentId,
+              matchId: body.matchId,
+              setNumber: body.setNumber,
+              teamAScore: body.teamAScore,
+              teamBScore: body.teamBScore,
+              setStatus: body.setStatus,
+              matchFinished: body.matchFinished,
+              matchWinnerId: body.matchWinnerId,
+            },
+          };
+          server?.publish(
+            `match:${body.matchId}`,
+            JSON.stringify(broadcastData),
+          );
+          server?.publish(
+            `tournament:${tournamentId}`,
+            JSON.stringify(broadcastData),
+          );
+
           return sendResponse({
             success: true,
             message: "Score updated successfully",
           });
-        } catch (error) {
-          console.error("[match/update-score] failed", error);
+        } catch (error: any) {
+          console.error("[match/update-score] failed:", error);
           return sendResponse({
             success: false,
-            message: "Failed to update score",
+            message: error.message || "Failed to update score",
           });
         }
       },
       {
         body: t.Object({
-          matchId: t.String(),
+          matchId: t.String({ format: "uuid" }),
+          teamAId: t.Optional(t.String({ format: "uuid" })),
+          teamBId: t.Optional(t.String({ format: "uuid" })),
           setNumber: t.Number(),
           teamAScore: t.Number(),
           teamBScore: t.Number(),
@@ -398,14 +462,18 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
         });
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
       },
     )
     .post(
       "/list/:eventId",
       async ({ db, params: { eventId }, body }) => {
         const matches = await db.query.matchTable.findMany({
-          where: { eventId: eventId, roundNumber: body.roundNumber },
+          where: ((table: any, { eq, and }: any) =>
+            and(
+              eq(table.eventId, eventId),
+              eq(table.roundNumber, body.roundNumber),
+            )) as any,
           with: {
             sets: true,
             teamAData: {
@@ -436,7 +504,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
         });
       },
       {
-        params: t.Object({ eventId: t.String() }),
+        params: t.Object({ eventId: t.String({ format: "uuid" }) }),
         body: t.Object({
           roundNumber: t.Number(),
         }),
@@ -491,7 +559,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
         });
       },
       {
-        params: t.Object({ matchId: t.String() }),
+        params: t.Object({ matchId: t.String({ format: "uuid" }) }),
       },
     )
     .get(
@@ -527,12 +595,12 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
         });
       },
       {
-        params: t.Object({ setId: t.String() }),
+        params: t.Object({ setId: t.String({ format: "uuid" }) }),
       },
     )
     .post(
       "/set/update-state/:setId",
-      async ({ user, db, body, params: { setId } }) => {
+      async ({ user, db, body, params: { setId }, server }: any) => {
         try {
           const set = await db.query.setTable.findFirst({
             where: { id: setId },
@@ -564,10 +632,14 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
           // Scorer or org member
           const isScorer = set.match.scorer === user.id;
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: set.match.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  set.match!.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!isScorer && !member) {
@@ -582,6 +654,27 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
             .set({ setStatus: body.state })
             .where(eq(setTable.id, setId));
 
+          // Broadcast set state update
+          const tournamentId = set.match.event!.tournament!.id;
+          const broadcastData = {
+            type: "SET_STATE_UPDATE",
+            data: {
+              tournamentId: tournamentId,
+              matchId: set.matchId,
+              setId: setId,
+              setNumber: set.setNumber,
+              state: body.state,
+            },
+          };
+          server?.publish(
+            `match:${set.matchId}`,
+            JSON.stringify(broadcastData),
+          );
+          server?.publish(
+            `tournament:${tournamentId}`,
+            JSON.stringify(broadcastData),
+          );
+
           return sendResponse({
             success: true,
             message: `Set status updated to ${body.state} successfully`,
@@ -595,7 +688,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
         }
       },
       {
-        params: t.Object({ setId: t.String() }),
+        params: t.Object({ setId: t.String({ format: "uuid" }) }),
         body: t.Object({
           state: t.Union([
             t.Literal("not_started"),
@@ -607,7 +700,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
     )
     .post(
       "/start/:matchId",
-      async ({ db, user, params: { matchId } }) => {
+      async ({ db, user, params: { matchId }, server }: any) => {
         try {
           const match = await db.query.matchTable.findFirst({
             where: { id: matchId },
@@ -629,10 +722,14 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
 
           const isScorer = match.scorer === user.id;
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: match.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  match.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!isScorer && !member) {
@@ -642,7 +739,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
             });
           }
 
-          await db.transaction(async (tx) => {
+          await db.transaction(async (tx: any) => {
             // Update match state
             await tx
               .update(matchTable)
@@ -658,6 +755,18 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
             }
           });
 
+          // Broadcast match start
+          const tournamentId = match.event!.tournament!.id;
+          const broadcastData = {
+            type: "MATCH_START",
+            data: { tournamentId, matchId },
+          };
+          server?.publish(`match:${matchId}`, JSON.stringify(broadcastData));
+          server?.publish(
+            `tournament:${tournamentId}`,
+            JSON.stringify(broadcastData),
+          );
+
           return sendResponse({
             success: true,
             message: "Match started successfully",
@@ -671,12 +780,12 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
         }
       },
       {
-        params: t.Object({ matchId: t.String() }),
+        params: t.Object({ matchId: t.String({ format: "uuid" }) }),
       },
     )
     .post(
       "/complete/:matchId",
-      async ({ db, user, body, params: { matchId } }) => {
+      async ({ db, user, body, params: { matchId }, server }: any) => {
         try {
           const match = await db.query.matchTable.findFirst({
             where: { id: matchId },
@@ -698,10 +807,14 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
 
           const isScorer = match.scorer === user.id;
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: match.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  match.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!isScorer && !member) {
@@ -714,7 +827,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
           const loserId =
             body.winnerId === match.teamA ? match.teamB : match.teamA;
 
-          await db.transaction(async (tx) => {
+          await db.transaction(async (tx: any) => {
             // 1. Update match state and winner
             await tx
               .update(matchTable)
@@ -761,16 +874,11 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
                 );
 
               if (totalMatchesInRound.length === 1) {
-                // It was the final! (Assuming knockout)
-                // Actually, Phase 5 says "until only one match (the final) remains."
-                // Phase 6 says "Event Completion: Trigger: The final match of the event is completed."
-                // So if totalMatchesInRound.length === 1 and it's completed, event is completed.
                 await tx
                   .update(eventTable)
                   .set({
                     eventState: "completed",
                     winnerId: body.winnerId,
-                    
                   })
                   .where(eq(eventTable.id, match.event!.id));
               } else {
@@ -784,6 +892,22 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
               }
             }
           });
+
+          // Broadcast match completion
+          const tournamentId = match.event!.tournament!.id;
+          const broadcastData = {
+            type: "MATCH_COMPLETE",
+            data: {
+              tournamentId,
+              matchId,
+              winnerId: body.winnerId,
+            },
+          };
+          server?.publish(`match:${matchId}`, JSON.stringify(broadcastData));
+          server?.publish(
+            `tournament:${tournamentId}`,
+            JSON.stringify(broadcastData),
+          );
 
           return sendResponse({
             success: true,
@@ -800,13 +924,13 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
       {
         params: t.Object({ matchId: t.String() }),
         body: t.Object({
-          winnerId: t.String(),
+          winnerId: t.String({ format: "uuid" }),
         }),
       },
     )
     .post(
       "/set/initialize",
-      async ({ db, user, body }) => {
+      async ({ db, user, body, server }: any) => {
         try {
           const match = await db.query.matchTable.findFirst({
             where: { id: body.matchId },
@@ -828,10 +952,14 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
 
           const isScorer = match.scorer === user.id;
           const member = await db.query.organizationMemberTable.findFirst({
-            where: {
-              organizationId: match.event.tournament.organizationId,
-              userId: user.id,
-            },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(
+                  table.organizationId,
+                  match.event!.tournament!.organizationId,
+                ),
+                eq(table.userId, user.id),
+              )) as any,
           });
 
           if (!isScorer && !member) {
@@ -843,7 +971,11 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
           }
 
           const existingSet = await db.query.setTable.findFirst({
-            where: { matchId: body.matchId, setNumber: body.setNumber },
+            where: ((table: any, { eq, and }: any) =>
+              and(
+                eq(table.matchId, body.matchId),
+                eq(table.setNumber, body.setNumber),
+              )) as any,
           });
 
           if (existingSet) {
@@ -865,10 +997,32 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
             })
             .returning({ id: setTable.id });
 
+          const setId = insertedSet[0]!.id;
+
+          // Broadcast set initialization
+          const tournamentId = match.event!.tournament!.id;
+          const broadcastData = {
+            type: "SET_INITIALIZED",
+            data: {
+              tournamentId,
+              matchId: body.matchId,
+              setId: setId,
+              setNumber: body.setNumber,
+            },
+          };
+          server?.publish(
+            `match:${body.matchId}`,
+            JSON.stringify(broadcastData),
+          );
+          server?.publish(
+            `tournament:${tournamentId}`,
+            JSON.stringify(broadcastData),
+          );
+
           return sendResponse({
             success: true,
             message: "Set initialized successfully",
-            data: { setId: insertedSet[0]!.id },
+            data: { setId },
           });
         } catch (error) {
           console.error("[match/set/initialize] failed", error);
@@ -880,7 +1034,7 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
       },
       {
         body: t.Object({
-          matchId: t.String(),
+          matchId: t.String({ format: "uuid" }),
           setNumber: t.Number(),
         }),
       },
