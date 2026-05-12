@@ -356,7 +356,6 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
                     .update(eventTable)
                     .set({
                       eventState: "completed",
-                      winnerId: body.matchWinnerId,
                     })
                     .where(eq(eventTable.id, match.event!.id));
                 } else {
@@ -411,8 +410,8 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
       {
         body: t.Object({
           matchId: t.String({ format: "uuid" }),
-          teamAId: t.Optional(t.String({ format: "uuid" })),
-          teamBId: t.Optional(t.String({ format: "uuid" })),
+          teamAId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
+          teamBId: t.Optional(t.Nullable(t.String({ format: "uuid" }))),
           setNumber: t.Number(),
           teamAScore: t.Number(),
           teamBScore: t.Number(),
@@ -878,7 +877,6 @@ export const matchRoutes = protectedApi.group("/match", (app) =>
                   .update(eventTable)
                   .set({
                     eventState: "completed",
-                    winnerId: body.winnerId,
                   })
                   .where(eq(eventTable.id, match.event!.id));
               } else {
