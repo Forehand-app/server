@@ -27,7 +27,7 @@ export const inviteRoutes = protectedApi.group("/invite", (app) =>
               id: inviteTypeTable.id,
             })
             .from(inviteTypeTable)
-            .where(eq(inviteTypeTable.code, "tournamentCrew"))
+            .where(eq(inviteTypeTable.code, "tournament"))
             .limit(1);
           if (!inviteType) {
             return sendResponse({
